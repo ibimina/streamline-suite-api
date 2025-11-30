@@ -1,0 +1,64 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+.tmp/
+.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Environment files
+.env
+.env.*.local
+.env.local
+.env.production
+.env.development
+
+# IDEs and editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Test output
+.vscode-test/
+jest-cache/
+
+# Misc
+uploads/
+tmp/
+.cache/
+parcel-cache/
+dump/
+data/
+
+# Keys and secrets
+*.pem
+*.key
+secrets/

@@ -3,316 +3,343 @@ import { Injectable } from "@nestjs/common";
 // Financial calculation utility class
 export class FinancialCalculator {
   /**
-   * Calculate subtotal from items (quantity * unitPrice)
+   * Calculate financials for a single quotation item
    */
-  static calculateSubtotal(
-    items: Array<{ quantity: number; unitPrice: number }>
-  ): number {
-    return items.reduce((sum, item) => {
-      const itemTotal = item.quantity * item.unitPrice;
-      return sum + itemTotal;
-    }, 0);
-  }
+  static calculateQuotationItem(item: {
+    quantity: number;
+    unitPrice: number;
+    discountPercent?: number;
+    vatRate: number;
+    unitCost: number;
+  }) {
+    const lineSubtotal = item.quantity * item.unitPrice;
+    const discountAmount = (lineSubtotal * (item.discountPercent || 0)) / 100;
+    const afterDiscount = lineSubtotal - discountAmount;
+    const vatAmount = (afterDiscount * item.vatRate) / 100;
+    const lineTotal = afterDiscount + vatAmount;
 
-  /**
-   * Calculate tax amount from items (using taxRate per item)
-   */
-  static calculateTaxAmount(
-    items: Array<{ quantity: number; unitPrice: number; taxRate?: number }>
-  ): number {
-    return items.reduce((sum, item) => {
-      const itemTotal = item.quantity * item.unitPrice;
-      const taxRate = item.taxRate || 0;
-      const itemTax = (itemTotal * taxRate) / 100;
-      return sum + itemTax;
-    }, 0);
-  }
-
-  /**
-   * Calculate VAT (Value Added Tax) - added to customer invoice
-   */
-  static calculateVAT(subtotal: number, vatRate: number = 0): number {
-    return (subtotal * vatRate) / 100;
-  }
-
-  /**
-   * Calculate Withholding Tax - deducted from revenue (affects profit)
-   */
-  static calculateWithholdingTax(
-    subtotal: number,
-    whtRate: number = 0
-  ): number {
-    return (subtotal * whtRate) / 100;
-  }
-
-  /**
-   * Calculate discount amount
-   */
-  static calculateDiscountAmount(
-    subtotal: number,
-    discount: number,
-    discountType: "percentage" | "fixed" = "fixed"
-  ): number {
-    if (discountType === "percentage") {
-      return (subtotal * discount) / 100;
-    }
-    return discount;
-  }
-
-  /**
-   * Calculate final total with VAT and withholding tax
-   * VAT is added to customer total, withholding tax affects what we receive
-   */
-  static calculateTotal(
-    subtotal: number,
-    taxAmount: number = 0,
-    discountAmount: number = 0,
-    vatAmount: number = 0
-  ): number {
-    // Customer pays: subtotal + itemTax + VAT - discount
-    return subtotal + taxAmount + vatAmount - discountAmount;
-  }
-
-  /**
-   * Calculate net amount we actually receive (after withholding tax deduction)
-   */
-  static calculateNetReceivable(
-    total: number,
-    withholdingTaxAmount: number = 0
-  ): number {
-    // What we actually receive: total - withholding tax
-    return total - withholdingTaxAmount;
-  }
-
-  /**
-   * Calculate total cost from items (quantity * costPrice)
-   */
-  static calculateTotalCost(
-    items: Array<{ quantity: number; costPrice?: number }>
-  ): number {
-    return items.reduce((sum, item) => {
-      const cost = item.costPrice || 0;
-      return sum + item.quantity * cost;
-    }, 0);
-  }
-
-  /**
-   * Calculate profit from revenue and cost
-   */
-  static calculateProfit(revenue: number, cost: number): number {
-    return revenue - cost;
-  }
-
-  /**
-   * Calculate profit margin percentage
-   */
-  static calculateProfitMargin(profit: number, revenue: number): number {
-    if (revenue === 0) return 0;
-    return (profit / revenue) * 100;
-  }
-
-  /**
-   * Calculate markup percentage (profit over cost)
-   */
-  static calculateMarkup(profit: number, cost: number): number {
-    if (cost === 0) return 0;
-    return (profit / cost) * 100;
-  }
-
-  /**
-   * Calculate item-level profit details
-   */
-  static calculateItemProfit(
-    quantity: number,
-    unitPrice: number,
-    costPrice: number = 0
-  ) {
-    const revenue = quantity * unitPrice;
-    const cost = quantity * costPrice;
-    const profit = revenue - cost;
-    const margin = this.calculateProfitMargin(profit, revenue);
-    const markup = this.calculateMarkup(profit, cost);
+    // Profit calculations
+    const totalCost = item.quantity * item.unitCost;
+    const profit = afterDiscount - totalCost;
+    const profitMargin = afterDiscount > 0 ? (profit / afterDiscount) * 100 : 0;
 
     return {
-      revenue: this.roundToTwoDecimals(revenue),
-      cost: this.roundToTwoDecimals(cost),
+      quantity: item.quantity,
+      unitPrice: this.roundToTwoDecimals(item.unitPrice),
+      lineSubtotal: this.roundToTwoDecimals(lineSubtotal),
+      discountPercent: item.discountPercent || 0,
+      discountAmount: this.roundToTwoDecimals(discountAmount),
+      vatRate: item.vatRate,
+      vatAmount: this.roundToTwoDecimals(vatAmount),
+      lineTotal: this.roundToTwoDecimals(lineTotal),
+      unitCost: this.roundToTwoDecimals(item.unitCost),
+      totalCost: this.roundToTwoDecimals(totalCost),
       profit: this.roundToTwoDecimals(profit),
-      margin: this.roundToTwoDecimals(margin),
-      markup: this.roundToTwoDecimals(markup),
+      profitMargin: this.roundToTwoDecimals(profitMargin),
     };
   }
 
   /**
-   * Calculate all financial values including VAT, withholding tax, and profit tracking
+   * Calculate financials for a single invoice item
    */
-  static calculateFinancials(
-    items: Array<{ quantity: number; unitPrice: number; costPrice?: number }>,
-    discount: number = 0,
-    discountType: "percentage" | "fixed" = "fixed",
-    taxRate?: number,
-    vatRate: number = 0,
-    whtRate: number = 0
-  ) {
-    // Silent validation with logging (never throw errors to users)
-    if (!items || items.length === 0) {
-      console.warn(
-        "[FINANCIAL_CALCULATION] Empty items array provided, returning zero values"
-      );
-      return {
-        subtotal: 0,
-        taxAmount: 0,
-        vatAmount: 0,
-        withholdingTaxAmount: 0,
-        discountAmount: 0,
-        total: 0,
-        netReceivable: 0,
-        totalCost: 0,
-        totalProfit: 0,
-        netProfit: 0,
-        overallMargin: 0,
-        netMargin: 0,
-        overallMarkup: 0,
-      };
-    }
-
-    // Clean and validate items silently
-    const validItems = items.filter((item, index) => {
-      if (item.quantity <= 0) {
-        console.warn(
-          `[FINANCIAL_CALCULATION] Item ${index + 1}: Invalid quantity ${item.quantity}, skipping`
-        );
-        return false;
-      }
-      if (item.unitPrice < 0) {
-        console.warn(
-          `[FINANCIAL_CALCULATION] Item ${index + 1}: Negative unitPrice ${item.unitPrice}, using 0`
-        );
-        item.unitPrice = 0;
-      }
-      if (item.costPrice && item.costPrice < 0) {
-        console.warn(
-          `[FINANCIAL_CALCULATION] Item ${index + 1}: Negative costPrice ${item.costPrice}, using 0`
-        );
-        item.costPrice = 0;
-      }
-      return true;
-    });
-
-    // Validate tax rates
-    if (taxRate && (taxRate < 0 || taxRate > 100)) {
-      console.warn(
-        `[FINANCIAL_CALCULATION] Invalid tax rate ${taxRate}, using 0`
-      );
-      taxRate = 0;
-    }
-    if (vatRate < 0 || vatRate > 100) {
-      console.warn(
-        `[FINANCIAL_CALCULATION] Invalid VAT rate ${vatRate}, using 0`
-      );
-      vatRate = 0;
-    }
-    if (whtRate < 0 || whtRate > 100) {
-      console.warn(
-        `[FINANCIAL_CALCULATION] Invalid WHT rate ${whtRate}, using 0`
-      );
-      whtRate = 0;
-    }
-
-    if (validItems.length === 0) {
-      console.warn(
-        "[FINANCIAL_CALCULATION] No valid items after filtering, returning zero values"
-      );
-      return {
-        subtotal: 0,
-        taxAmount: 0,
-        vatAmount: 0,
-        withholdingTaxAmount: 0,
-        discountAmount: 0,
-        total: 0,
-        netReceivable: 0,
-        totalCost: 0,
-        totalProfit: 0,
-        netProfit: 0,
-        overallMargin: 0,
-        netMargin: 0,
-        overallMarkup: 0,
-      };
-    }
-
-    // Basic calculations
-    const subtotal = this.calculateSubtotal(validItems);
-    const itemTaxAmount = this.calculateTaxAmount(
-      validItems.map((item) => ({
-        ...item,
-        taxRate: taxRate || 0,
-      }))
-    );
-    const discountAmount = this.calculateDiscountAmount(
-      subtotal,
-      discount,
-      discountType
-    );
-
-    // Tax calculations
-    const vatAmount = this.calculateVAT(subtotal - discountAmount, vatRate);
-    const withholdingTaxAmount = this.calculateWithholdingTax(
-      subtotal - discountAmount,
-      whtRate
-    );
-
-    // Total calculations
-    const total = this.calculateTotal(
-      subtotal,
-      itemTaxAmount,
-      discountAmount,
-      vatAmount
-    );
-    const netReceivable = this.calculateNetReceivable(
-      total,
-      withholdingTaxAmount
-    );
+  static calculateInvoiceItem(item: {
+    quantity: number;
+    unitPrice: number;
+    discountPercent?: number;
+    vatRate: number;
+    subjectToWHT?: boolean;
+    whtRate?: number;
+    unitCost: number;
+  }) {
+    const lineSubtotal = item.quantity * item.unitPrice;
+    const discountAmount = (lineSubtotal * (item.discountPercent || 0)) / 100;
+    const afterDiscount = lineSubtotal - discountAmount;
+    const vatAmount = (afterDiscount * item.vatRate) / 100;
+    const whtAmount =
+      item.subjectToWHT && item.whtRate
+        ? (afterDiscount * item.whtRate) / 100
+        : 0;
+    const lineTotal = afterDiscount + vatAmount;
 
     // Profit calculations
-    const totalCost = this.calculateTotalCost(validItems);
-    const grossRevenue = subtotal - discountAmount; // Revenue after discount
-    const grossProfit = this.calculateProfit(grossRevenue, totalCost);
-
-    // Net profit after withholding tax deduction
-    const netRevenue = grossRevenue - withholdingTaxAmount;
-    const netProfit = this.calculateProfit(netRevenue, totalCost);
-
-    // Profit margins
-    const overallMargin = this.calculateProfitMargin(grossProfit, grossRevenue);
-    const netMargin = this.calculateProfitMargin(netProfit, netRevenue);
-    const overallMarkup = this.calculateMarkup(grossProfit, totalCost);
-
-    // Ensure non-negative values
-    const finalTotal = Math.max(0, total);
-    const finalNetReceivable = Math.max(0, netReceivable);
-
-    if (total < 0) {
-      console.warn(
-        `[FINANCIAL_CALCULATION] Negative total ${total} corrected to 0`
-      );
-    }
+    const totalCost = item.quantity * item.unitCost;
+    const grossProfit = afterDiscount - totalCost;
+    const netProfit = afterDiscount - whtAmount - totalCost;
+    const grossMargin =
+      afterDiscount > 0 ? (grossProfit / afterDiscount) * 100 : 0;
+    const netMargin =
+      afterDiscount - whtAmount > 0
+        ? (netProfit / (afterDiscount - whtAmount)) * 100
+        : 0;
 
     return {
-      // Basic financials
-      subtotal: this.roundToTwoDecimals(subtotal),
-      taxAmount: this.roundToTwoDecimals(itemTaxAmount),
-      vatAmount: this.roundToTwoDecimals(vatAmount),
-      withholdingTaxAmount: this.roundToTwoDecimals(withholdingTaxAmount),
+      quantity: item.quantity,
+      unitPrice: this.roundToTwoDecimals(item.unitPrice),
+      lineSubtotal: this.roundToTwoDecimals(lineSubtotal),
+      discountPercent: item.discountPercent || 0,
       discountAmount: this.roundToTwoDecimals(discountAmount),
-      total: this.roundToTwoDecimals(finalTotal),
-      netReceivable: this.roundToTwoDecimals(finalNetReceivable),
-
-      // Profit tracking
+      vatRate: item.vatRate,
+      vatAmount: this.roundToTwoDecimals(vatAmount),
+      subjectToWHT: item.subjectToWHT || false,
+      whtRate: item.whtRate || 0,
+      whtAmount: this.roundToTwoDecimals(whtAmount),
+      lineTotal: this.roundToTwoDecimals(lineTotal),
+      unitCost: this.roundToTwoDecimals(item.unitCost),
       totalCost: this.roundToTwoDecimals(totalCost),
-      totalProfit: this.roundToTwoDecimals(grossProfit),
+      grossProfit: this.roundToTwoDecimals(grossProfit),
       netProfit: this.roundToTwoDecimals(netProfit),
-      overallMargin: this.roundToTwoDecimals(overallMargin),
+      grossMargin: this.roundToTwoDecimals(grossMargin),
       netMargin: this.roundToTwoDecimals(netMargin),
-      overallMarkup: this.roundToTwoDecimals(overallMarkup),
+    };
+  }
+
+  /**
+   * Calculate totals for quotation
+   */
+  static calculateQuotationTotals(
+    items: Array<{
+      quantity: number;
+      unitPrice: number;
+      discountPercent?: number;
+      vatRate: number;
+      unitCost: number;
+    }>
+  ) {
+    if (!items || items.length === 0) {
+      return {
+        subtotal: 0,
+        totalDiscount: 0,
+        totalVat: 0,
+        grandTotal: 0,
+        totalCost: 0,
+        expectedProfit: 0,
+        expectedProfitMargin: 0,
+        items: [],
+      };
+    }
+
+    // Validate and process items
+    const processedItems = items.map((item, index) => {
+      const validatedItem = { ...item };
+
+      if (validatedItem.quantity <= 0) {
+        console.warn(
+          `[QUOTATION_CALC] Item ${index + 1}: Invalid quantity, using 1`
+        );
+        validatedItem.quantity = 1;
+      }
+      if (validatedItem.unitPrice < 0) {
+        console.warn(
+          `[QUOTATION_CALC] Item ${index + 1}: Negative price, using 0`
+        );
+        validatedItem.unitPrice = 0;
+      }
+      if (validatedItem.unitCost < 0) {
+        console.warn(
+          `[QUOTATION_CALC] Item ${index + 1}: Negative cost, using 0`
+        );
+        validatedItem.unitCost = 0;
+      }
+      if (validatedItem.vatRate < 0 || validatedItem.vatRate > 100) {
+        console.warn(
+          `[QUOTATION_CALC] Item ${index + 1}: Invalid VAT rate, using 0`
+        );
+        validatedItem.vatRate = 0;
+      }
+      if (
+        validatedItem.discountPercent &&
+        (validatedItem.discountPercent < 0 ||
+          validatedItem.discountPercent > 100)
+      ) {
+        console.warn(
+          `[QUOTATION_CALC] Item ${index + 1}: Invalid discount, using 0`
+        );
+        validatedItem.discountPercent = 0;
+      }
+
+      return this.calculateQuotationItem(validatedItem);
+    });
+
+    // Sum up totals
+    const subtotal = processedItems.reduce(
+      (sum, item) => sum + item.lineSubtotal,
+      0
+    );
+    const totalDiscount = processedItems.reduce(
+      (sum, item) => sum + item.discountAmount,
+      0
+    );
+    const totalVat = processedItems.reduce(
+      (sum, item) => sum + item.vatAmount,
+      0
+    );
+    const grandTotal = processedItems.reduce(
+      (sum, item) => sum + item.lineTotal,
+      0
+    );
+    const totalCost = processedItems.reduce(
+      (sum, item) => sum + item.totalCost,
+      0
+    );
+    const expectedProfit = processedItems.reduce(
+      (sum, item) => sum + item.profit,
+      0
+    );
+
+    const afterDiscountTotal = subtotal - totalDiscount;
+    const expectedProfitMargin =
+      afterDiscountTotal > 0 ? (expectedProfit / afterDiscountTotal) * 100 : 0;
+
+    return {
+      subtotal: this.roundToTwoDecimals(subtotal),
+      totalDiscount: this.roundToTwoDecimals(totalDiscount),
+      totalVat: this.roundToTwoDecimals(totalVat),
+      grandTotal: this.roundToTwoDecimals(grandTotal),
+      totalCost: this.roundToTwoDecimals(totalCost),
+      expectedProfit: this.roundToTwoDecimals(expectedProfit),
+      expectedProfitMargin: this.roundToTwoDecimals(expectedProfitMargin),
+      items: processedItems,
+    };
+  }
+
+  /**
+   * Calculate totals for invoice
+   */
+  static calculateInvoiceTotals(
+    items: Array<{
+      quantity: number;
+      unitPrice: number;
+      discountPercent?: number;
+      vatRate: number;
+      subjectToWHT?: boolean;
+      whtRate?: number;
+      unitCost: number;
+    }>
+  ) {
+    if (!items || items.length === 0) {
+      return {
+        subtotal: 0,
+        totalDiscount: 0,
+        totalVat: 0,
+        totalWht: 0,
+        grandTotal: 0,
+        netReceivable: 0,
+        totalCost: 0,
+        totalGrossProfit: 0,
+        totalNetProfit: 0,
+        grossProfitMargin: 0,
+        netProfitMargin: 0,
+        items: [],
+      };
+    }
+
+    // Validate and process items
+    const processedItems = items.map((item, index) => {
+      const validatedItem = { ...item };
+
+      if (validatedItem.quantity <= 0) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Invalid quantity, using 1`
+        );
+        validatedItem.quantity = 1;
+      }
+      if (validatedItem.unitPrice < 0) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Negative price, using 0`
+        );
+        validatedItem.unitPrice = 0;
+      }
+      if (validatedItem.unitCost < 0) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Negative cost, using 0`
+        );
+        validatedItem.unitCost = 0;
+      }
+      if (validatedItem.vatRate < 0 || validatedItem.vatRate > 100) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Invalid VAT rate, using 0`
+        );
+        validatedItem.vatRate = 0;
+      }
+      if (
+        validatedItem.whtRate &&
+        (validatedItem.whtRate < 0 || validatedItem.whtRate > 100)
+      ) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Invalid WHT rate, using 0`
+        );
+        validatedItem.whtRate = 0;
+      }
+      if (
+        validatedItem.discountPercent &&
+        (validatedItem.discountPercent < 0 ||
+          validatedItem.discountPercent > 100)
+      ) {
+        console.warn(
+          `[INVOICE_CALC] Item ${index + 1}: Invalid discount, using 0`
+        );
+        validatedItem.discountPercent = 0;
+      }
+
+      return this.calculateInvoiceItem(validatedItem);
+    });
+
+    // Sum up totals
+    const subtotal = processedItems.reduce(
+      (sum, item) => sum + item.lineSubtotal,
+      0
+    );
+    const totalDiscount = processedItems.reduce(
+      (sum, item) => sum + item.discountAmount,
+      0
+    );
+    const totalVat = processedItems.reduce(
+      (sum, item) => sum + item.vatAmount,
+      0
+    );
+    const totalWht = processedItems.reduce(
+      (sum, item) => sum + item.whtAmount,
+      0
+    );
+    const grandTotal = processedItems.reduce(
+      (sum, item) => sum + item.lineTotal,
+      0
+    );
+    const netReceivable = grandTotal - totalWht;
+    const totalCost = processedItems.reduce(
+      (sum, item) => sum + item.totalCost,
+      0
+    );
+    const totalGrossProfit = processedItems.reduce(
+      (sum, item) => sum + item.grossProfit,
+      0
+    );
+    const totalNetProfit = processedItems.reduce(
+      (sum, item) => sum + item.netProfit,
+      0
+    );
+
+    const afterDiscountTotal = subtotal - totalDiscount;
+    const grossProfitMargin =
+      afterDiscountTotal > 0
+        ? (totalGrossProfit / afterDiscountTotal) * 100
+        : 0;
+    const netProfitMargin =
+      netReceivable > 0 ? (totalNetProfit / netReceivable) * 100 : 0;
+
+    return {
+      subtotal: this.roundToTwoDecimals(subtotal),
+      totalDiscount: this.roundToTwoDecimals(totalDiscount),
+      totalVat: this.roundToTwoDecimals(totalVat),
+      totalWht: this.roundToTwoDecimals(totalWht),
+      grandTotal: this.roundToTwoDecimals(grandTotal),
+      netReceivable: this.roundToTwoDecimals(netReceivable),
+      totalCost: this.roundToTwoDecimals(totalCost),
+      totalGrossProfit: this.roundToTwoDecimals(totalGrossProfit),
+      totalNetProfit: this.roundToTwoDecimals(totalNetProfit),
+      grossProfitMargin: this.roundToTwoDecimals(grossProfitMargin),
+      netProfitMargin: this.roundToTwoDecimals(netProfitMargin),
+      items: processedItems,
     };
   }
 
@@ -322,199 +349,144 @@ export class FinancialCalculator {
   static roundToTwoDecimals(amount: number): number {
     return Math.round(amount * 100) / 100;
   }
-
-  /**
-   * Calculate item-level totals with tax and profit details
-   */
-  static calculateItemTotals(
-    items: Array<{
-      quantity: number;
-      unitPrice: number;
-      costPrice?: number;
-    }>,
-    taxRate?: number
-  ) {
-    return items.map((item) => {
-      const revenue = item.quantity * item.unitPrice;
-      const taxAmount = (revenue * taxRate) / 100;
-      const totalWithTax = revenue + taxAmount;
-
-      // Profit calculations
-      const profit = this.calculateItemProfit(
-        item.quantity,
-        item.unitPrice,
-        item.costPrice || 0
-      );
-
-      return {
-        ...item,
-        amount: this.roundToTwoDecimals(revenue),
-        taxAmount: this.roundToTwoDecimals(taxAmount),
-        totalWithTax: this.roundToTwoDecimals(totalWithTax),
-        ...profit,
-      };
-    });
-  }
-
-  /**
-   * Validate financial data
-   */
-  static validateFinancialData(data: {
-    items: Array<{ quantity: number; unitPrice: number; taxRate?: number }>;
-    subtotal?: number;
-    taxAmount?: number;
-    total?: number;
-    discount?: number;
-  }): { isValid: boolean; correctedData: any } {
-    const calculated = this.calculateFinancials(data.items, data.discount || 0);
-
-    // Allow small rounding differences (0.01)
-    const tolerance = 0.01;
-    let hasDiscrepancies = false;
-
-    if (
-      data.subtotal !== undefined &&
-      Math.abs(data.subtotal - calculated.subtotal) > tolerance
-    ) {
-      console.warn(
-        `[FINANCIAL_VALIDATION] Subtotal corrected: ${data.subtotal} → ${calculated.subtotal}`
-      );
-      hasDiscrepancies = true;
-    }
-
-    if (
-      data.taxAmount !== undefined &&
-      Math.abs(data.taxAmount - calculated.taxAmount) > tolerance
-    ) {
-      console.warn(
-        `[FINANCIAL_VALIDATION] Tax amount corrected: ${data.taxAmount} → ${calculated.taxAmount}`
-      );
-      hasDiscrepancies = true;
-    }
-
-    if (
-      data.total !== undefined &&
-      Math.abs(data.total - calculated.total) > tolerance
-    ) {
-      console.warn(
-        `[FINANCIAL_VALIDATION] Total corrected: ${data.total} → ${calculated.total}`
-      );
-      hasDiscrepancies = true;
-    }
-
-    return {
-      isValid: !hasDiscrepancies,
-      correctedData: calculated,
-    };
-  }
 }
 
-// Usage in Invoice/Quotation Services
+// Base service for Invoice/Quotation Services
 @Injectable()
 export class BaseFinancialService {
   /**
-   * Process and validate financial calculations
+   * Process quotation financial calculations
    */
-  protected processFinancialCalculations(
+  protected processQuotationFinancials(
     items: Array<{
       quantity: number;
       unitPrice: number;
-      costPrice?: number;
-      taxRate?: number;
-    }>,
-    providedDiscount: number = 0,
-    discountType: "percentage" | "fixed" = "fixed",
-    defaultTaxRate?: number,
-    vatRate: number = 0,
-    whtRate: number = 0
+      discountPercent?: number;
+      vatRate: number;
+      unitCost: number;
+    }>
   ) {
-    // Calculate server-side values - ALWAYS use these (no client validation needed)
-    const calculated = FinancialCalculator.calculateFinancials(
-      items,
-      providedDiscount,
-      discountType,
-      defaultTaxRate,
-      vatRate,
-      whtRate
-    );
+    const calculated = FinancialCalculator.calculateQuotationTotals(items);
 
-    // Log calculation details for monitoring
     console.log(
-      `[FINANCIAL_SERVICE] Calculated: subtotal=${calculated.subtotal}, vat=${calculated.vatAmount}, wht=${calculated.withholdingTaxAmount}, total=${calculated.total}, netReceivable=${calculated.netReceivable}, netProfit=${calculated.netProfit}, netMargin=${calculated.netMargin}%`
+      `[QUOTATION_SERVICE] Calculated: subtotal=${calculated.subtotal}, totalVat=${calculated.totalVat}, grandTotal=${calculated.grandTotal}, expectedProfit=${calculated.expectedProfit}, margin=${calculated.expectedProfitMargin}%`
     );
 
-    // Always return server-calculated values (never trust client)
+    return calculated;
+  }
+
+  /**
+   * Process invoice financial calculations
+   */
+  protected processInvoiceFinancials(
+    items: Array<{
+      quantity: number;
+      unitPrice: number;
+      discountPercent?: number;
+      vatRate: number;
+      subjectToWHT?: boolean;
+      whtRate?: number;
+      unitCost: number;
+    }>
+  ) {
+    const calculated = FinancialCalculator.calculateInvoiceTotals(items);
+
+    console.log(
+      `[INVOICE_SERVICE] Calculated: subtotal=${calculated.subtotal}, totalVat=${calculated.totalVat}, totalWht=${calculated.totalWht}, grandTotal=${calculated.grandTotal}, netReceivable=${calculated.netReceivable}, netProfit=${calculated.totalNetProfit}, netMargin=${calculated.netProfitMargin}%`
+    );
+
     return calculated;
   }
 
   /**
    * Generate financial summary for response
    */
-  protected generateFinancialSummary(
-    subtotal: number,
-    taxAmount: number,
-    discountAmount: number,
-    total: number,
-    vatAmount: number = 0,
-    withholdingTaxAmount: number = 0,
-    netReceivable: number = 0,
-    totalCost: number = 0,
-    totalProfit: number = 0,
-    netProfit: number = 0,
-    overallMargin: number = 0,
-    netMargin: number = 0,
-    overallMarkup: number = 0,
+  protected generateQuotationSummary(
+    calculated: any,
     currency: string = "USD"
   ) {
     return {
       subtotal: {
-        amount: subtotal,
-        formatted: this.formatCurrency(subtotal, currency),
-      },
-      itemTax: {
-        amount: taxAmount,
-        formatted: this.formatCurrency(taxAmount, currency),
-      },
-      vat: {
-        amount: vatAmount,
-        formatted: this.formatCurrency(vatAmount, currency),
-      },
-      withholdingTax: {
-        amount: withholdingTaxAmount,
-        formatted: this.formatCurrency(withholdingTaxAmount, currency),
+        amount: calculated.subtotal,
+        formatted: this.formatCurrency(calculated.subtotal, currency),
       },
       discount: {
-        amount: discountAmount,
-        formatted: this.formatCurrency(discountAmount, currency),
+        amount: calculated.totalDiscount,
+        formatted: this.formatCurrency(calculated.totalDiscount, currency),
       },
-      total: {
-        amount: total,
-        formatted: this.formatCurrency(total, currency),
+      vat: {
+        amount: calculated.totalVat,
+        formatted: this.formatCurrency(calculated.totalVat, currency),
+        description: "Value Added Tax",
+      },
+      grandTotal: {
+        amount: calculated.grandTotal,
+        formatted: this.formatCurrency(calculated.grandTotal, currency),
+        description: "Total amount customer pays",
+      },
+      profit: {
+        totalCost: {
+          amount: calculated.totalCost,
+          formatted: this.formatCurrency(calculated.totalCost, currency),
+        },
+        expectedProfit: {
+          amount: calculated.expectedProfit,
+          formatted: this.formatCurrency(calculated.expectedProfit, currency),
+          description: "Expected profit if converted to invoice",
+        },
+        expectedMargin: `${calculated.expectedProfitMargin.toFixed(2)}%`,
+      },
+      currency,
+    };
+  }
+
+  protected generateInvoiceSummary(calculated: any, currency: string = "USD") {
+    return {
+      subtotal: {
+        amount: calculated.subtotal,
+        formatted: this.formatCurrency(calculated.subtotal, currency),
+      },
+      discount: {
+        amount: calculated.totalDiscount,
+        formatted: this.formatCurrency(calculated.totalDiscount, currency),
+      },
+      vat: {
+        amount: calculated.totalVat,
+        formatted: this.formatCurrency(calculated.totalVat, currency),
+        description: "Value Added Tax (customer pays)",
+      },
+      withholdingTax: {
+        amount: calculated.totalWht,
+        formatted: this.formatCurrency(calculated.totalWht, currency),
+        description: "Withholding Tax (deducted from our receivable)",
+      },
+      grandTotal: {
+        amount: calculated.grandTotal,
+        formatted: this.formatCurrency(calculated.grandTotal, currency),
         description: "Total amount customer pays",
       },
       netReceivable: {
-        amount: netReceivable,
-        formatted: this.formatCurrency(netReceivable, currency),
+        amount: calculated.netReceivable,
+        formatted: this.formatCurrency(calculated.netReceivable, currency),
         description: "Amount we actually receive (after WHT deduction)",
       },
       profit: {
         totalCost: {
-          amount: totalCost,
-          formatted: this.formatCurrency(totalCost, currency),
+          amount: calculated.totalCost,
+          formatted: this.formatCurrency(calculated.totalCost, currency),
         },
         grossProfit: {
-          amount: totalProfit,
-          formatted: this.formatCurrency(totalProfit, currency),
+          amount: calculated.totalGrossProfit,
+          formatted: this.formatCurrency(calculated.totalGrossProfit, currency),
           description: "Profit before withholding tax",
         },
         netProfit: {
-          amount: netProfit,
-          formatted: this.formatCurrency(netProfit, currency),
+          amount: calculated.totalNetProfit,
+          formatted: this.formatCurrency(calculated.totalNetProfit, currency),
           description: "Actual profit after withholding tax deduction",
         },
-        grossMargin: `${overallMargin.toFixed(2)}%`,
-        netMargin: `${netMargin.toFixed(2)}%`,
-        markup: `${overallMarkup.toFixed(2)}%`,
+        grossMargin: `${calculated.grossProfitMargin.toFixed(2)}%`,
+        netMargin: `${calculated.netProfitMargin.toFixed(2)}%`,
       },
       currency,
     };

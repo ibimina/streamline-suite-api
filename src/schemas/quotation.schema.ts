@@ -1,7 +1,8 @@
-import { Prop, Schema } from "@nestjs/mongoose";
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 import { QuotationStatus } from "@/common/types";
 
+export type QuotationDocument = Quotation & Document;
 @Schema({ timestamps: true })
 export class QuotationItem {
   @Prop({ type: Types.ObjectId, ref: 'Product' })
@@ -56,10 +57,25 @@ export class Quotation extends Document {
   @Prop() grandTotal: number;
   @Prop() expectedProfit: number;
   @Prop() expectedProfitMargin: number;
+  @Prop()
+  template?: string;
+
+  @Prop()
+  templateId?: string;
+
+  @Prop()
+  accentColor?: string;
 
   @Prop({ enum: QuotationStatus, default: QuotationStatus.DRAFT })
   status: string;
 
   @Prop() validUntil?: Date;
-  @Prop() pdfUrl?: string;
+
+  @Prop() convertedToInvoice?: boolean;
+  
+  
+  @Prop() notes?: string;
+  @Prop() terms?: string;
 }
+
+export const QuotationSchema = SchemaFactory.createForClass(Quotation);

@@ -57,7 +57,7 @@ export class CloudinaryService {
   }
 
   // Get cloudinary instance for direct usage
-  getCloudinary() {
-    return cloudinary;
-  }
+  // getCloudinary() {
+  //   return cloudinary;
+  // }
 }

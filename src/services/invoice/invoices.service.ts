@@ -15,7 +15,6 @@ import {
 } from "@/common/types";
 import { Company, CompanyDocument } from "@/schemas/company.schema";
 import {
-  FinancialCalculator,
   BaseFinancialService,
 } from "@/common/utils/financial-calculator";
 
@@ -52,23 +51,14 @@ export class InvoicesService extends BaseFinancialService {
       invoiceNumber = `INV-${(lastNumber + 1).toString().padStart(3, "0")}`;
     }
 
-    const financials = this.processFinancialCalculations(
-      createInvoiceDto.items,
-      createInvoiceDto.discount || 0,
-      "percentage",
-      createInvoiceDto.taxRate || 0
-    );
-
+    const financials = this.processInvoiceFinancials(createInvoiceDto.items);
 
     const invoice = new this.invoiceModel({
       ...createInvoiceDto,
+      ...financials,
       invoiceNumber,
       companyId,
       createdBy: userId,
-      subtotal: financials.subtotal,
-      taxAmount: financials.taxAmount,
-      discountAmount: financials.discountAmount,
-      total: financials.total,
     });
 
     return invoice.save();
@@ -162,29 +152,14 @@ export class InvoicesService extends BaseFinancialService {
       throw new BadRequestException("Cannot update paid invoice");
     }
 
-    // Recalculate financial values if items are updated
-    let subtotal: number;
-    let taxAmount: number;
-    let discountAmount: number;
-    let total: number;
+    let financials = {};
 
     if (updateInvoiceDto.items) {
-      const financials = this.processFinancialCalculations(
-        updateInvoiceDto.items,
-        updateInvoiceDto.discount || invoice.discount || 0,
-        updateInvoiceDto.discountType || invoice.discountType || "fixed",
-        updateInvoiceDto.taxRate || invoice.taxRate || 0
-      );
-
-      // Update with calculated values
-      subtotal = financials.subtotal;
-      taxAmount = financials.taxAmount;
-      discountAmount = financials.discountAmount;
-      total = financials.total;
+      financials = this.processInvoiceFinancials(updateInvoiceDto.items);
     }
 
     return this.invoiceModel
-      .findByIdAndUpdate(id,{ subtotal, taxAmount, discountAmount, total, ...updateInvoiceDto })
+      .findByIdAndUpdate(id, { ...updateInvoiceDto, ...financials })
       .populate("createdBy", "name email")
       .exec();
   }

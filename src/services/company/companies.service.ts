@@ -5,15 +5,18 @@ import {
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { randomUUID } from "crypto";
-import { CreateCompanyDto, UpdateCompanyDto } from "@/models/dto/companies/company.dto";
+import { CreateCompanyDto } from "@/models/dto/companies/company.dto";
 import { Company, CompanyDocument } from "@/schemas/company.schema";
+import { UpdateCompanyDto } from "@/models/dto/companies/update-company.dto";
+import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
+import { CloudinaryService } from "../cloudinary/cloudinary.service";
 
 
 @Injectable()
 export class CompaniesService {
   constructor(
     @InjectModel(Company.name) private companyModel: Model<CompanyDocument>,
+    private readonly cloudinaryService: CloudinaryService
   ) {}
 
   async getStats(companyId: string): Promise<any> {
@@ -29,7 +32,6 @@ export class CompaniesService {
       totalRevenue,
     };
   }
-  
 
   async create(
     createCompanyDto: CreateCompanyDto,
@@ -60,11 +62,8 @@ export class CompaniesService {
   ): Promise<Company> {
     const company = await this.companyModel.findById(id).exec();
 
-    // Check if user owns the company
-    if (company.ownerId.toString() !== userId) {
-      throw new ForbiddenException(
-        "You do not have permission to update this company"
-      );
+    if (!company) {
+      throw new NotFoundException("Company not found");
     }
 
     Object.assign(company, updateCompanyDto);
@@ -72,69 +71,41 @@ export class CompaniesService {
   }
 
   async uploadLogo(
-    id: string,
-    file: Express.Multer.File,
-    userId: string
+    uploadFileDto: UploadFileDto,
+    companyId: string
   ): Promise<any> {
-    const company = await this.companyModel.findById(id).exec();
+    const company = await this.companyModel.findById(companyId).exec();
 
-    // Check permissions
-    // if (company.ownerId.toString() !== userId) {
-    //   throw new ForbiddenException(
-    //     "You do not have permission to update this company"
-    //   );
-    // }
+    if (!company) {
+      throw new NotFoundException("Company not found");
+    }
 
-    // try {
-    //   // Process and save the image
-    //   const processedPath = await this.fileUploadService.processImage(
-    //     file.path,
-    //     {
-    //       width: 400,
-    //       height: 400,
-    //       quality: 90,
-    //     }
-    //   );
+    const result = await this.cloudinaryService.uploadImage(uploadFileDto);
 
-    //   // Delete old logo if exists
-    //   if (company.logoPath) {
-    //     this.fileUploadService.deleteFile(company.logoPath);
-    //   }
-
-    //   // Update company with new logo paths
-    //   company.logoPath = processedPath;
-    //   company.logoUrl = this.fileUploadService.generatePublicUrl(processedPath);
-
-    //   return company.save();
-    // } catch (error) {
-    //   // Clean up uploaded file on error
-    //   if (file.path) {
-    //     this.fileUploadService.deleteFile(file.path);
-    //   }
-    //   throw error;
-    // }
+    await this.companyModel.findByIdAndUpdate(companyId, {
+      logoUrl: result.secure_url,
+      publicId: result.public_id,
+    });
+    return;
   }
 
   async deleteLogo(id: string, userId: string): Promise<any> {
     const company = await this.companyModel.findById(id).exec();
+   // Check permissions
+    if (company.ownerId.toString() !== userId) {
+      throw new ForbiddenException(
+        "You do not have permission to update this company"
+      );
+    }
 
-    // Check permissions
-    // if (company.ownerId.toString() !== userId) {
-    //   throw new ForbiddenException(
-    //     "You do not have permission to update this company"
-    //   );
-    // }
+    if (!company) {
+      throw new NotFoundException("Company not found");
+    }
 
-    // // Delete logo file
-    // if (company.logoPath) {
-    //   this.fileUploadService.deleteFile(company.logoPath);
-    // }
+    await this.cloudinaryService.deleteImage(company.publicId);
 
-    // // Update company
-    // company.logoPath = undefined;
-    // company.logoUrl = undefined;
-
-    // return company.save();
+    company.logoUrl = undefined;
+    company.publicId = undefined;
+    return company.save();
   }
-
 }

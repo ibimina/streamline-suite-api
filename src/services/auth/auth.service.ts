@@ -10,10 +10,7 @@ import { Model } from "mongoose";
 import * as bcrypt from "bcrypt";
 
 import { User, UserDocument } from "@/schemas/user.schema";
-import {
-  LoginDto,
-  CreateCompanyandUserDto,
-} from "@/models/dto/auth/auth.dto";
+import { LoginDto, CreateCompanyandUserDto } from "@/models/dto/auth/auth.dto";
 import { JwtPayload } from "@/strategies/jwt.strategy";
 import { TokenFreeBlacklistService } from "../token/token-free-blacklist.service";
 
@@ -94,10 +91,7 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    // Find user
-    const user = await this.userModel
-      .findOne({ email })
-      .exec();
+    const user = await this.userModel.findOne({ email }).exec();
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException(
@@ -105,20 +99,16 @@ export class AuthService {
       );
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    // Update last login
     user.lastLoginAt = new Date();
     await user.save();
 
-    // Generate tokens
     const tokens = await this.generateTokens(user);
 
-    // Return user without password
     const { password: _, ...userResult } = user.toObject();
 
     return {

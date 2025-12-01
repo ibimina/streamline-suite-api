@@ -75,7 +75,18 @@ export class TokenFreeBlacklistService {
         return false; // User doesn't exist
       }
 
-      return user.tokenVersion === tokenVersion;
+      // Handle existing users without tokenVersion field (treat as version 1)
+      const userTokenVersion = user.tokenVersion ?? 1;
+
+      // If user doesn't have tokenVersion, update them with default value
+      if (user.tokenVersion === undefined) {
+        this.logger.debug(
+          `Updating user ${userId} with default tokenVersion: 1`
+        );
+        await this.userModel.findByIdAndUpdate(userId, { tokenVersion: 1 });
+      }
+
+      return userTokenVersion === tokenVersion;
     } catch (error) {
       this.logger.warn("Failed to check token version:", error.message);
       return false; // Fail closed for security

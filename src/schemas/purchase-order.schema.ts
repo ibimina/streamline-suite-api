@@ -59,6 +59,15 @@ export class PurchaseOrder {
   notes: string;
 
   @Prop()
+  template?: string;
+
+  @Prop()
+  templateId?: string;
+
+  @Prop()
+  accentColor?: string;
+
+  @Prop()
   companyId: string;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: "User" })

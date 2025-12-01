@@ -45,13 +45,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // Check token version (invalidates all tokens when user logs out)
+    // For existing tokens without tokenVersion, use default value of 1
+    const tokenVersion = payload.tokenVersion ?? 1;
+
     if (
-      payload.tokenVersion &&
       !(await this.blacklistService.isTokenVersionValid(
         payload.sub,
-        payload.tokenVersion
+        tokenVersion
       ))
     ) {
+      console.log(
+        `Token version validation failed for user ${payload.sub}: token has version ${tokenVersion}`
+      );
       throw new UnauthorizedException("Token version is invalid");
     }
 

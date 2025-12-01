@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsEmail,
   IsOptional,
   IsArray,
   IsNumber,
@@ -8,13 +7,22 @@ import {
   ValidateNested,
   Min,
   Max,
+  IsEnum,
+  ArrayMinSize,
+  IsMongoId,
+  IsNotEmpty,
 } from "class-validator";
 import { Type } from "class-transformer";
-import { QuotationItemDetails } from "@/common/types";
+import { QuotationStatus } from "@/common/types";
 
-export class ItemDto implements QuotationItemDetails {
+export class ItemDto {
+  @IsOptional()
   @IsString()
-  name: string;
+  product?: string; // Product ObjectId reference
+
+  @IsOptional()
+  @IsString()
+  name?: string;
 
   @IsString()
   description: string;
@@ -30,60 +38,37 @@ export class ItemDto implements QuotationItemDetails {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  sellingPricePercentage: number;
+  @Max(100)
+  discountPercent?: number;
 
-  @IsOptional()
   @IsNumber()
   @Min(0)
-  costPrice: number;
+  @Max(100)
+  vatRate: number; // Required VAT rate per item
+
+  @IsNumber()
+  @Min(0)
+  unitCost: number; // Required for profit calculation
 }
 
 export class CreateQuotationDto {
-  @IsDateString()
-  issueDate: Date;
-
-  @IsDateString()
-  expiryDate: Date;
-
-  @IsString()
-  clientName: string;
-
-  @IsOptional()
-  @IsEmail()
-  clientEmail: string;
-
-  @IsOptional()
-  @IsString()
-  clientPhone?: string;
-
-  @IsString()
-  clientAddress: string;
-
-  @IsOptional()
-  @IsString()
-  clientCity?: string;
-
-  @IsOptional()
-  @IsString()
-  clientState?: string;
-
-  @IsOptional()
-  @IsString()
-  clientCountry?: string;
-
-  @IsOptional()
-  @IsString()
-  clientZipCode?: string;
+  @IsMongoId()
+  @IsNotEmpty()
+  customer: string; // Customer ObjectId reference (required)
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => ItemDto)
   items: ItemDto[];
 
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discount?: number;
+  @IsEnum(QuotationStatus)
+  status?: QuotationStatus;
+
+  @IsOptional()
+  @IsDateString()
+  validUntil?: Date;
 
   @IsOptional()
   @IsString()
@@ -99,21 +84,9 @@ export class CreateQuotationDto {
 
   @IsOptional()
   @IsString()
-  customTemplateId?: string;
+  templateId?: string;
 
   @IsOptional()
   @IsString()
   accentColor?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  vatRate?: number; // Default VAT rate for quotation
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  whtRate?: number; // Withholding tax rate
 }

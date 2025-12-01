@@ -4,7 +4,6 @@ import {
   Body,
   HttpCode,
   HttpStatus,
-  UseGuards,
   Req,
 } from "@nestjs/common";
 import {
@@ -15,7 +14,6 @@ import {
 } from "@nestjs/swagger";
 
 import { AuthService } from "@/services/auth/auth.service";
-import { Public } from "@/common/decorators/public.decorator";
 import { GetUser } from "@/common/decorators/get-user.decorator";
 import {
   LoginDto,
@@ -29,7 +27,6 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Public()
   @Post("registerCompany")
   @ApiOperation({ summary: "Register a new company" })
   @ApiResponse({ status: 201, description: "Company registered successfully" })
@@ -40,7 +37,6 @@ export class AuthController {
     return this.authService.registerCompany(createCompanyandUserDto);
   }
 
-  @Public()
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "User login" })
@@ -50,7 +46,6 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Public()
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
@@ -135,4 +130,5 @@ export class AuthController {
   async getBlacklistStats() {
     return this.authService.getBlacklistStats();
   }
+
 }

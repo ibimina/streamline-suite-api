@@ -57,15 +57,11 @@ export class Company {
   @Prop({ default: 0 })
   defaultWithholdingTaxRate: number;
 
-  // File storage paths for logos and templates
-  @Prop({ trim: true })
-  logo?: string; // Path to company logo image
-
-  @Prop({ trim: true })
-  logoPath?: string; // Path to company logo image
-
   @Prop({ trim: true })
   logoUrl?: string; // Public URL for logo access
+
+  @Prop({ required: false, unique: true })
+    publicId: string;
 
   // Company settings
   @Prop({

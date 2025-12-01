@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsEmail,
   IsOptional,
   IsArray,
   IsNumber,
@@ -10,11 +9,16 @@ import {
   Max,
   IsEnum,
   ArrayMinSize,
+  IsBoolean,
 } from "class-validator";
 import { Type } from "class-transformer";
-import { InvoiceStatus, ItemDetails } from "@/common/types";
+import { InvoiceStatus } from "@/common/types";
 
-export class ItemDto implements ItemDetails {
+export class ItemDto {
+  @IsOptional()
+  @IsString()
+  product?: string; // Product ObjectId reference
+
   @IsString()
   description: string;
 
@@ -29,28 +33,36 @@ export class ItemDto implements ItemDetails {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  costPrice?: number;
+  @Max(100)
+  discountPercent?: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  vatRate: number; // Required VAT rate per item
+
+  @IsOptional()
+  @IsBoolean()
+  subjectToWHT?: boolean; // Whether this item is subject to withholding tax
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  whtRate?: number; // Withholding tax rate for this item
+
+  @IsNumber()
+  @Min(0)
+  unitCost: number; // Required for profit calculation
 }
 
 export class CreateInvoiceDto {
-  @IsDateString()
-  issueDate: Date;
-
-  @IsDateString()
   @IsOptional()
-  dueDate: Date;
+  @IsString()
+  quotation?: string; // Quotation ObjectId reference
 
   @IsString()
-  clientName: string;
-
-  @IsEmail()
-  clientEmail: string;
-
-  @IsString()
-  clientAddress: string;
-
-  @IsEnum(InvoiceStatus)
-  status: InvoiceStatus;
+  customer: string; // Customer ObjectId reference (required)
 
   @IsArray()
   @ArrayMinSize(1)
@@ -59,9 +71,12 @@ export class CreateInvoiceDto {
   items: ItemDto[];
 
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discount?: number;
+  @IsEnum(InvoiceStatus)
+  status?: InvoiceStatus;
+
+  @IsOptional()
+  @IsDateString()
+  dueDate?: Date;
 
   @IsOptional()
   @IsString()
@@ -82,25 +97,4 @@ export class CreateInvoiceDto {
   @IsOptional()
   @IsString()
   accentColor?: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  taxRate?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  vatRate?: number; // VAT rate percentage (added to customer total)
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  whtRate?: number; // Withholding tax rate percentage (deducted from our receivable)
-
-  @IsOptional()
-  @IsEnum(["percentage", "fixed"])
-  discountType?: "percentage" | "fixed";
 }

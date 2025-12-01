@@ -20,9 +20,13 @@ import { UserService } from './services/user/user.service';
 import { UserSchema } from './schemas/user.schema';
 import { CompanySchema } from './schemas/company.schema';
 import { InvoiceSchema } from './schemas/invoice.schema';
-import { QuotationSchema } from './schemas/quotation.schema';
 import { TokenFreeBlacklistService } from './services/token/token-free-blacklist.service';
-import { FileUploadService } from './common/services/file-upload.service';
+import { QuotationSchema } from './schemas/quotation.schema';
+import { CustomerSchema } from './schemas/customer.schema';
+import { CloudinaryService } from './services/cloudinary/cloudinary.service';
+import { TemplateSchema } from './schemas/template.schema';
+import { TemplateController } from './controllers/templates/template.controller';
+import { TemplateService } from './services/templates/template.service';
 
 @Module({
   
@@ -57,23 +61,14 @@ import { FileUploadService } from './common/services/file-upload.service';
       { name: 'Company', schema: CompanySchema },
       { name: 'Invoice', schema: InvoiceSchema },
       { name: 'Quotation', schema: QuotationSchema },
-                        
-
-
-
+      { name: 'Customer', schema: CustomerSchema },
+            { name: 'Template', schema: TemplateSchema },
         ]),
     // Rate limiting
   ThrottlerModule.forRoot({
       ttl: 60,
       limit: 100,
   }),
-  
-    // Application controllers
-  
-  
-    //application Services
-  
- 
   ],
   controllers: [
     AuthController,
@@ -81,7 +76,8 @@ import { FileUploadService } from './common/services/file-upload.service';
     EmailController,
     InvoicesController,
     QuotationsController,
-    UserController
+    UserController,
+    TemplateController,
 
   ],
   providers: [
@@ -92,7 +88,8 @@ import { FileUploadService } from './common/services/file-upload.service';
     QuotationsService,
     UserService,
     TokenFreeBlacklistService,
-    FileUploadService
+    CloudinaryService,
+    TemplateService,
   ],
 })
 export class AppModule {}

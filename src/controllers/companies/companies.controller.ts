@@ -7,27 +7,19 @@ import {
   Body,
   Param,
   UseGuards,
-  UseInterceptors,
-  UploadedFile,
-  BadRequestException,
   Req,
+  HttpStatus,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiTags,
   ApiOperation,
-  ApiConsumes,
-  ApiBody,
 } from "@nestjs/swagger";
-
-import {
-  UpdateCompanyDto,
-} from "@/models/dto/companies/company.dto";
-import { GetUser } from "@/common/decorators/get-user.decorator";
 import { Roles } from "@/common/decorators/roles.decorator";
 import { UserRole } from "@/common/types";
 import { RolesGuard } from "@/common/guards/roles.guard";
 import { CompaniesService } from "@/services/company/companies.service";
+import { UpdateCompanyDto } from "@/models/dto/companies/update-company.dto";
+import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
 
 @ApiTags("companies")
 @Controller("companies")
@@ -51,45 +43,65 @@ export class CompaniesController {
     return await this.companiesService.findOne(id);
   }
 
-  @Put(":id")
+  @Put("")
   @ApiOperation({ summary: "Update company" })
   async update(
-    @Param("id") id: string,
     @Body() updateCompanyDto: UpdateCompanyDto,
-    @GetUser("id") userId: string
+    @Req() req: Request & { user: { id: string, companyId: string } },
   ) {
-    return this.companiesService.update(id, updateCompanyDto, userId);
+    return this.companiesService.update(req.user.companyId, updateCompanyDto, req.user.id);
   }
 
-  @Post(":id/logo")
+
+ @Post("")
   @ApiOperation({ summary: "Upload company logo" })
-  @ApiConsumes("multipart/form-data")
-  @ApiBody({
-    description: "Company logo image",
-    type: "multipart/form-data",
-    schema: {
-      type: "object",
-      properties: {
-        file: {
-          type: "string",
-          format: "binary",
-        },
-      },
-    },
-  })
-  @UseInterceptors(FileInterceptor("file", {}))
   async uploadLogo(
-    @Param("id") id: string,
-    @UploadedFile() file: Express.Multer.File,
-    @GetUser("id") userId: string
+    @Req() req: Request & { user: { id: string; companyId: string } },
+    @Body() uploadFileDto: UploadFileDto
   ) {
-    return this.companiesService.uploadLogo(id, file, userId);
+    try {
+      const result = await this.companiesService.uploadLogo(
+        uploadFileDto,
+        req.user.companyId
+      );
+      if (result) {
+        return {
+          payload: result,
+          message: "Template uploaded successfully",
+          status: HttpStatus.OK,
+        };
+      }
+      return undefined;
+    } catch (error) {
+      console.error(
+        `Error occured in Template Controller in - uploadTemplate`,
+        JSON.stringify(error)
+      );
+      throw error;
+    }
   }
-
-  @Delete(":id/logo")
+  @Delete("")
   @ApiOperation({ summary: "Delete company logo" })
-  async deleteLogo(@Param("id") id: string, @GetUser("id") userId: string) {
-    return this.companiesService.deleteLogo(id, userId);
+  async deleteLogo(@Req() req: Request & { user: { id: string; companyId: string } }) {
+    try {
+      const result = await this.companiesService.deleteLogo(
+        req.user.id,
+        req.user.companyId
+      );
+      if (result) {
+        return {
+          payload: result,
+          message: "Company logo deleted successfully",
+          status: HttpStatus.OK,
+        };
+      }
+      return undefined;
+    } catch (error) {
+      console.error(
+        `Error occured in Companies Controller in - deleteLogo`,
+        JSON.stringify(error)
+      );
+      throw error;
+    }
   }
-
 }

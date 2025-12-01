@@ -2,7 +2,7 @@ import { Document, Types } from "mongoose";
 import { InvoiceStatus } from "@/common/types";
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 
-
+export type InvoiceDocument = Invoice & Document;
 
 @Schema({ timestamps: true })
 export class InvoiceItem {
@@ -65,7 +65,7 @@ export class Invoice extends Document {
   @Prop({ unique: true, required: true })
   invoiceNumber: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'Quotation' })
+  @Prop({ type: Types.ObjectId, ref: 'Quotation',  })
   quotation?: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
@@ -73,6 +73,38 @@ export class Invoice extends Document {
 
   @Prop({ type: [InvoiceItem], default: [] })
   items: InvoiceItem[];
+
+  @Prop({ enum: InvoiceStatus, default: InvoiceStatus.DRAFT })
+  status: InvoiceStatus;
+
+  @Prop() dueDate: Date;
+
+  @Prop()
+  notes?: string;
+
+  @Prop()
+  terms?: string;
+
+  @Prop()
+  template?: string;
+
+  @Prop()
+  templateId?: string;
+
+  @Prop()
+  accentColor?: string;
+
+  @Prop({ type: [{ amount: Number, date: Date, method: String }], default: [] })
+  payments: { amount: number; date: Date; method: string }[];
+
+  @Prop() amountPaid: number;
+  @Prop() balanceDue: number;
+
+  @Prop()
+  sentDate?: Date;
+
+  @Prop()
+  paidDate?: Date;
 
   // Totals
   @Prop() subtotalExclTax: number;
@@ -82,21 +114,14 @@ export class Invoice extends Document {
   @Prop() grandTotal: number;
 
   // Profit Summary
-  @Prop() totalCostOfGoods: number;
-  @Prop() grossProfit: number;           // Revenue - COGS
-  @Prop() netProfitAfterWHT: number;     // Final money in pocket
-
-  @Prop({ enum: InvoiceStatus, default: InvoiceStatus.DRAFT })
-  status: InvoiceStatus;
-
-  @Prop() dueDate: Date;
-  @Prop() pdfUrl?: string;
-
-  @Prop({ type: [{ amount: Number, date: Date, method: String }], default: [] })
-  payments: { amount: number; date: Date; method: string }[];
-
-  @Prop() amountPaid: number;
-  @Prop() balanceDue: number;
+  @Prop() totalCost: number;
+  @Prop() totalGrossProfit: number;
+  @Prop() totalNetProfit: number;
+  @Prop() grossProfitMargin: number;  // % of Revenue
+  // Revenue - COGS
+  @Prop() netReceivable: number;   // Revenue - WHT
+  @Prop() netProfitMargin: number;  // % of Net Receivable
+  
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);

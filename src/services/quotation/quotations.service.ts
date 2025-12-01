@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, ObjectId } from "mongoose";
 import { Quotation, QuotationDocument } from "@/schemas/quotation.schema";
 import { CreateQuotationDto } from "@/models/dto/quotations/create-quotation.dto";
 import { UpdateQuotationDto } from "@/models/dto/quotations/update-quotation.dto";
@@ -15,9 +15,9 @@ import {
 } from "@/common/types";
 import { Company, CompanyDocument } from "@/schemas/company.schema";
 import {
-  FinancialCalculator,
   BaseFinancialService,
 } from "@/common/utils/financial-calculator";
+import { Customer, CustomerDocument } from "@/schemas/customer.schema";
 
 @Injectable()
 export class QuotationsService extends BaseFinancialService {
@@ -25,20 +25,30 @@ export class QuotationsService extends BaseFinancialService {
     @InjectModel(Quotation.name)
     private quotationModel: Model<QuotationDocument>,
     @InjectModel(Company.name)
-    private companyModel: Model<CompanyDocument>
+    private companyModel: Model<CompanyDocument>,
+    @InjectModel(Customer.name)
+    private customerModel: Model<CustomerDocument>,
   ) {
-        super();
-
+    super();
   }
 
   async create(
     createQuotationDto: CreateQuotationDto,
-    companyId: string,
+    companyId: ObjectId,
     userId: string
   ): Promise<Quotation> {
     const company = await this.companyModel.findById(companyId).exec();
     if (!company) {
       throw new NotFoundException("Company not found");
+    }
+
+    // Verify customer exists
+    const customer = await this.customerModel
+      .findById(createQuotationDto.customer)
+      .exec();
+    
+    if (!customer) {
+      throw new NotFoundException("Customer not found");
     }
 
     // Generate quotation number
@@ -53,29 +63,18 @@ export class QuotationsService extends BaseFinancialService {
       quotationNumber = `QUOT-${(lastNumber + 1).toString().padStart(3, "0")}`;
     }
 
-       const financials = this.processFinancialCalculations(
+    // Enhanced financial calculations with profit tracking
+    const financials = this.processInvoiceFinancials(
       createQuotationDto.items,
-      createQuotationDto.discount || 0
     );
-    // Calculate totals
-    const subtotal = createQuotationDto.items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0
-    );
-
 
     const quotation = new this.quotationModel({
       ...createQuotationDto,
+      ...financials,
       quotationNumber,
       companyId,
       createdBy: userId,
-       // Use server-calculated values only
-      subtotal: financials.subtotal,
-      taxAmount: financials.taxAmount,
-      discountAmount: financials.discountAmount,
-      total: financials.total,
     });
-
     return quotation.save();
   }
 
@@ -100,11 +99,8 @@ export class QuotationsService extends BaseFinancialService {
     const filter: any = { companyId: company._id };
 
     if (search) {
-      filter.$or = [
-        { quotationNumber: { $regex: search, $options: "i" } },
-        { clientName: { $regex: search, $options: "i" } },
-        { clientEmail: { $regex: search, $options: "i" } },
-      ];
+      // Search in quotation number or populate customer name/email
+      filter.$or = [{ quotationNumber: { $regex: search, $options: "i" } }];
     }
 
     const [quotations, total] = await Promise.all([
@@ -113,7 +109,8 @@ export class QuotationsService extends BaseFinancialService {
         .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
         .skip(skip)
         .limit(limit)
-        .populate("createdBy", "name email")
+        .populate("createdBy", "firstName lastName email")
+        .populate("customer", "name email phone")
         .exec(),
       this.quotationModel.countDocuments(filter).exec(),
     ]);
@@ -132,8 +129,9 @@ export class QuotationsService extends BaseFinancialService {
 
     const quotation = await this.quotationModel
       .findOne({ _id: id, companyId: company._id })
-      .populate("createdBy", "name email")
-      .populate("invoiceId")
+      .populate("createdBy", "firstName lastName email")
+      .populate("customer", "name email phone address taxId")
+      .populate("items.product", "name description")
       .exec();
 
     if (!quotation) {
@@ -158,6 +156,10 @@ export class QuotationsService extends BaseFinancialService {
       companyId: company._id,
     });
 
+    if (!quotation) {
+      throw new NotFoundException("Quotation not found");
+    }
+
     if (
       quotation.status === QuotationStatus.ACCEPTED ||
       quotation.convertedToInvoice
@@ -167,26 +169,25 @@ export class QuotationsService extends BaseFinancialService {
       );
     }
 
-    let subtotal: number;
-    let taxAmount: number;
-    let discountAmount: number;
-    let total: number;
+    let updateData: any = { ...updateQuotationDto };
+    let financials =  {};
 
     if (updateQuotationDto.items) {
-      const financials = this.processFinancialCalculations(
-        updateQuotationDto.items,
-        updateQuotationDto.discount || 0
-      );
-      // Update with calculated values
-      subtotal = financials.subtotal;
-      taxAmount = financials.taxAmount;
-      discountAmount = financials.discountAmount;
-      total = financials.total;
+      // Recalculate financials with new items
+       financials = this.processQuotationFinancials(
+        updateQuotationDto.items      );
+
+  
+      updateData = {
+        ...updateData,
+        ...financials,
+      };
     }
 
     return this.quotationModel
-      .findByIdAndUpdate(id, { subtotal, taxAmount, discountAmount, total, ...updateQuotationDto })
-      .populate("createdBy", "name email")
+      .findByIdAndUpdate(id, updateData)
+      .populate("createdBy", "firstName lastName email")
+      .populate("customer", "name email phone")
       .exec();
   }
 
@@ -234,8 +235,11 @@ export class QuotationsService extends BaseFinancialService {
     }
 
     return this.quotationModel
-      .findOneAndUpdate({ _id: id, companyId: company._id }, updateData)
-      .populate("createdBy", "name email")
+      .findOneAndUpdate({ _id: id, companyId: company._id }, updateData, {
+        new: true,
+      })
+      .populate("createdBy", "firstName lastName email")
+      .populate("customer", "name email")
       .exec();
   }
 
@@ -246,26 +250,36 @@ export class QuotationsService extends BaseFinancialService {
         $group: {
           _id: "$status",
           count: { $sum: 1 },
-          totalAmount: { $sum: "$total" },
+          totalAmount: { $sum: "$grandTotal" },
+          totalProfit: { $sum: "$expectedProfit" },
         },
       },
     ]);
 
     const result = {
       total: 0,
-      draft: { count: 0, amount: 0 },
-      sent: { count: 0, amount: 0 },
-      accepted: { count: 0, amount: 0 },
-      rejected: { count: 0, amount: 0 },
-      expired: { count: 0, amount: 0 },
+      totalValue: 0,
+      totalExpectedProfit: 0,
+      draft: { count: 0, amount: 0, profit: 0 },
+      sent: { count: 0, amount: 0, profit: 0 },
+      accepted: { count: 0, amount: 0, profit: 0 },
+      rejected: { count: 0, amount: 0, profit: 0 },
+      expired: { count: 0, amount: 0, profit: 0 },
     };
 
     stats.forEach((stat) => {
       result.total += stat.count;
-      result[stat._id.toLowerCase()] = {
-        count: stat.count,
-        amount: stat.totalAmount,
-      };
+      result.totalValue += stat.totalAmount || 0;
+      result.totalExpectedProfit += stat.totalProfit || 0;
+
+      const statusKey = stat._id.toLowerCase();
+      if (result[statusKey]) {
+        result[statusKey] = {
+          count: stat.count,
+          amount: stat.totalAmount || 0,
+          profit: stat.totalProfit || 0,
+        };
+      }
     });
 
     return result;
@@ -288,11 +302,10 @@ export class QuotationsService extends BaseFinancialService {
 
     // This would typically create an invoice and link it
     // For now, just mark as converted
-    quotation.convertedToInvoice = true;
-
     return this.quotationModel
       .findByIdAndUpdate(id, { convertedToInvoice: true }, { new: true })
-      .populate("createdBy", "name email")
+      .populate("createdBy", "firstName lastName email")
+      .populate("customer", "name email")
       .exec();
   }
 }

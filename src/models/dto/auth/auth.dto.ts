@@ -1,23 +1,19 @@
-import {
-  IsEmail,
-  IsString,
-  MinLength,
-} from "class-validator";
+import { IsEmail, IsString, MinLength } from "class-validator";
 import { Transform } from "class-transformer";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class CreateCompanyandUserDto {
-  @ApiProperty({ description: "Company name" })
+  @ApiProperty({ description: "Account name" })
   @IsString()
   @Transform(({ value }) => value?.trim())
   name: string;
 
-  @ApiPropertyOptional({ description: "Company description" })
+  @ApiPropertyOptional({ description: "Account description" })
   @IsString()
   @Transform(({ value }) => value?.trim())
   description?: string;
 
-  @ApiPropertyOptional({ description: "Company address" })
+  @ApiPropertyOptional({ description: "Account address" })
   @IsString()
   @Transform(({ value }) => value?.trim())
   address: string;
@@ -46,21 +42,6 @@ export class CreateCompanyandUserDto {
   @IsString()
   @Transform(({ value }) => value?.trim())
   country: string;
-
-  @ApiProperty({ description: "City" })
-  @IsString()
-  @Transform(({ value }) => value?.trim())
-  city: string;
-
-  @ApiProperty({ description: "zipCode" })
-  @IsString()
-  @Transform(({ value }) => value?.trim())
-  zipCode: string;
-
-  @ApiProperty({ description: "State" })
-  @IsString()
-  @Transform(({ value }) => value?.trim())
-  state: string;
 }
 
 export class LoginDto {

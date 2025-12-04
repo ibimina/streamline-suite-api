@@ -6,30 +6,34 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, ObjectId } from "mongoose";
 import * as bcrypt from "bcrypt";
 
 import { User, UserDocument } from "@/schemas/user.schema";
 import { LoginDto, CreateCompanyandUserDto } from "@/models/dto/auth/auth.dto";
-import { JwtPayload } from "@/strategies/jwt.strategy";
 import { TokenFreeBlacklistService } from "../token/token-free-blacklist.service";
+import { JwtPayload } from "@/models/interfaces";
+import { Account, AccountDocument } from "@/schemas/account.schema";
+import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel("Company") private companyModel: Model<any>,
+    @InjectModel(Account.name) private accountModel: Model<AccountDocument>,
     private jwtService: JwtService,
-    private blacklistService: TokenFreeBlacklistService
+    private blacklistService: TokenFreeBlacklistService,
+    private activityService: ActivityService
   ) {}
 
   async registerCompany(createCompanyandUserDto: CreateCompanyandUserDto) {
-    const existingCompany = await this.companyModel.findOne({
+    const existingCompany = await this.accountModel.findOne({
       name: createCompanyandUserDto.email,
     });
 
     if (existingCompany) {
-      throw new ConflictException("Company already exists");
+      throw new ConflictException("Account already exists");
     }
 
     // Check if user already exists
@@ -41,20 +45,16 @@ export class AuthService {
       throw new ConflictException("User with this email already exists");
     }
 
-    // Create company
-    const company = new this.companyModel({
+    // Create account
+    const account = new this.accountModel({
       name: createCompanyandUserDto.name,
       email: createCompanyandUserDto.email,
       address: createCompanyandUserDto.address,
       country: createCompanyandUserDto.country,
-      city: createCompanyandUserDto.city,
       description: createCompanyandUserDto.description,
-      state: createCompanyandUserDto.state,
-      zipCode: createCompanyandUserDto.zipCode,
     });
 
-    await company.save();
-
+    await account.save();
     // Hash password
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(
@@ -67,31 +67,48 @@ export class AuthService {
       email: createCompanyandUserDto.email,
       password: hashedPassword,
       role: "Admin",
-      companyId: company._id,
+      account: account._id,
       isActive: true,
       firstName: createCompanyandUserDto.firstName,
       lastName: createCompanyandUserDto.lastName,
     });
 
     await user.save();
-    await company.updateOne({ users: [user._id], ownerId: user._id });
+
+
+    // Link user to account
+
+
+    await this.accountModel
+      .updateOne({ _id: account._id }, { users: [user._id], ownerId: user._id })
+      .exec();
+
+    // Reload the account from DB and populate users to ensure populated data is returned
+    const populatedAccount = await this.accountModel
+      .findById(account._id)
+      .populate("users")
+      .exec();
 
     // Generate tokens
     const tokens = await this.generateTokens(user);
 
+    await user.populate("account users");
     // Return user without password
-    const { password, ...userResult } = user.toObject();
+    const { password, _id, ...userResult } = user.toObject();
 
     return {
       user: userResult,
       ...tokens,
+      account: populatedAccount,
     };
   }
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const user = await this.userModel.findOne({ email }).exec();
+    const user = await this.userModel
+      .findOne({ email })
+      .exec();
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException(
@@ -108,6 +125,19 @@ export class AuthService {
     await user.save();
 
     const tokens = await this.generateTokens(user);
+
+     user.populate({
+        path: "account",
+        populate: "users",
+      })
+
+    await this.activityService.create({
+      account: user.account?._id as any,
+      user: user._id,
+      type: ActivityType.USER_LOGIN,
+      description: "User logged in",
+      title: "User Login",
+    });
 
     const { password: _, ...userResult } = user.toObject();
 
@@ -145,10 +175,10 @@ export class AuthService {
 
   private async generateTokens(user: UserDocument) {
     const payload: JwtPayload = {
-      sub: user._id.toString(),
+      id: user._id.toString(),
       email: user.email,
       role: user.role,
-      companyId: user.companyId?.toString(),
+      accountId: user.account.toString(),
       tokenVersion: user.tokenVersion, // Include token version for invalidation
     };
     const [accessToken, refreshToken] = await Promise.all([
@@ -196,6 +226,14 @@ export class AuthService {
     // Invalidate all existing tokens after password change
     await this.blacklistService.invalidateTokensOnPasswordChange(userId);
 
+    await this.activityService.create({
+      account: user.account?._id as any,
+      user: user._id,
+      type: ActivityType.PASSWORD_CHANGE,
+      description: "User changed their password",
+      title: "Password Change",
+    });
+
     return { message: "Password changed successfully. Please login again." };
   }
 
@@ -206,8 +244,21 @@ export class AuthService {
     userId: string
   ): Promise<{ message: string; success: boolean }> {
     try {
+      const user = await this.userModel.findById(userId).exec();
+
+      if (!user) {
+        throw new UnauthorizedException("User not found");
+      }
       // Increment user's token version - invalidates ALL current tokens
       await this.blacklistService.invalidateAllUserTokens(userId, "logout");
+
+      await this.activityService.create({
+        account: user.account as any,
+        user: user._id,
+        type: ActivityType.USER_LOGOUT,
+        description: "User logged out",
+        title: "User Logout",
+      });
 
       return {
         message: "Successfully logged out from all devices",

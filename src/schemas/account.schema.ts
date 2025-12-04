@@ -1,15 +1,15 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 
-export type CompanyDocument = Company & Document;
+export type AccountDocument = Account & Document;
 
 @Schema({ timestamps: true })
-export class Company {
+export class Account {
   @Prop({ required: true, trim: true })
   name: string;
 
   @Prop({ trim: true })
-  description?: string;
+  industry: string;
 
   @Prop({ required: true, trim: true })
   address: string;
@@ -60,10 +60,9 @@ export class Company {
   @Prop({ trim: true })
   logoUrl?: string; // Public URL for logo access
 
-  @Prop({ required: false, unique: true })
-    publicId: string;
-
-  // Company settings
+  @Prop({ required: false,  })
+    publicId?: string;
+  // Account settings
   @Prop({
     type: {
       currency: { type: String, default: "USD" },
@@ -104,4 +103,4 @@ export class Company {
   templates: Types.ObjectId[];
 }
 
-export const CompanySchema = SchemaFactory.createForClass(Company);
+export const AccountSchema = SchemaFactory.createForClass(Account);

@@ -20,13 +20,13 @@ export class Template {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop({ type: Types.ObjectId, ref: "Company" })
- company: Types.ObjectId;
-    
+  @Prop({ type: Types.ObjectId, ref: "Account" })
+  account: Types.ObjectId;
+
   @Prop({ required: true })
-    publicId: string;
-    
-      @Prop({ default: Date.now })
+  publicId: string;
+
+  @Prop({ default: Date.now })
   createdAt: Date;
 
   @Prop({ default: Date.now })

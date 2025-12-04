@@ -3,21 +3,21 @@ import { CloudinaryService } from "../cloudinary/cloudinary.service";
 import { Model } from "mongoose";
 import { TemplateDocument } from "@/schemas/template.schema";
 import { randomUUID } from "crypto";
-import { CompanyDocument } from "@/schemas/company.schema";
+import { AccountDocument } from "@/schemas/account.schema";
 import { NotFoundException } from "@nestjs/common";
 
 export class TemplateService {
   constructor(
     private readonly cloudinaryService: CloudinaryService,
     private readonly templateModel: Model<TemplateDocument>,
-    private readonly companyModel: Model<CompanyDocument>
+    private readonly accountModel: Model<AccountDocument>
   ) {}
   async uploadTemplate(uploadFileDto: UploadFileDto, companyId: string) {
     try {
-      const company = await this.companyModel.findById(companyId).exec();
+      const account = await this.accountModel.findById(companyId).exec();
 
-      if (!company) {
-        throw new NotFoundException("Company not found");
+      if (!account) {
+        throw new NotFoundException("Account not found");
       }
       const result = await this.cloudinaryService.uploadImage(uploadFileDto);
 
@@ -31,14 +31,16 @@ export class TemplateService {
         uniqueId,
         name,
         description,
-        company: company._id,
+        account: account._id,
       });
-    
-        await this.companyModel.findByIdAndUpdate(
-          company._id,
+
+      await this.accountModel
+        .findByIdAndUpdate(
+          account._id,
           { $push: { templates: template._id } },
           { new: true }
-        ).exec();
+        )
+        .exec();
 
       return result;
     } catch (error) {
@@ -47,20 +49,20 @@ export class TemplateService {
   }
 
   async getAllTemplates(companyId: string) {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.accountModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
     const templates = await this.templateModel
-      .find({ company: company._id })
+      .find({ account: account._id })
       .exec();
     return templates;
   }
 
   async deleteTemplate(companyId: string, id: string) {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.accountModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const template = await this.templateModel.findById(id).exec();

@@ -13,16 +13,14 @@ import {
   PaginationQuery,
   PaginatedResponse,
 } from "@/common/types";
-import { Company, CompanyDocument } from "@/schemas/company.schema";
-import {
-  BaseFinancialService,
-} from "@/common/utils/financial-calculator";
+import { Account, AccountDocument } from "@/schemas/account.schema";
+import { BaseFinancialService } from "@/common/utils/financial-calculator";
 
 @Injectable()
 export class InvoicesService extends BaseFinancialService {
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
-    @InjectModel(Company.name) private companyModel: Model<CompanyDocument>
+    @InjectModel(Account.name) private companyModel: Model<AccountDocument>
   ) {
     super();
   }
@@ -34,14 +32,14 @@ export class InvoicesService extends BaseFinancialService {
   ): Promise<Invoice> {
     // Generate invoice number
 
-    const company = await this.companyModel.findById(companyId).exec();
+    const account = await this.companyModel.findById(companyId).exec();
 
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const lastInvoice = await this.invoiceModel
-      .findOne({ companyId: company._id })
+      .findOne({ companyId: account._id })
       .sort({ createdAt: -1 })
       .exec();
 
@@ -76,15 +74,15 @@ export class InvoicesService extends BaseFinancialService {
       sortOrder = "desc",
     } = query;
 
-    const company = await this.companyModel.findById(companyId).exec();
+    const account = await this.companyModel.findById(companyId).exec();
 
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const skip = (page - 1) * limit;
 
-    const filter: any = { companyId: company._id };
+    const filter: any = { companyId: account._id };
 
     if (search) {
       filter.$or = [
@@ -112,14 +110,14 @@ export class InvoicesService extends BaseFinancialService {
   }
 
   async findOne(id: string, companyId: string): Promise<Invoice> {
-    const company = await this.companyModel.findById(companyId).exec();
+    const account = await this.companyModel.findById(companyId).exec();
 
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: company._id })
+      .findOne({ _id: id, companyId: account._id })
       .populate("createdBy", "name email")
       .exec();
 
@@ -135,13 +133,13 @@ export class InvoicesService extends BaseFinancialService {
     updateInvoiceDto: UpdateInvoiceDto,
     companyId: string
   ): Promise<Invoice> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: company._id })
+      .findOne({ _id: id, companyId: account._id })
       .exec();
 
     if (!invoice) {
@@ -165,13 +163,13 @@ export class InvoicesService extends BaseFinancialService {
   }
 
   async remove(id: string, companyId: string): Promise<void> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: company._id })
+      .findOne({ _id: id, companyId: account._id })
       .exec();
     if (!invoice) {
       throw new NotFoundException("Invoice not found");
@@ -189,13 +187,13 @@ export class InvoicesService extends BaseFinancialService {
     status: InvoiceStatus,
     companyId: string
   ): Promise<Invoice> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: company._id })
+      .findOne({ _id: id, companyId: account._id })
       .exec();
     if (!invoice) {
       throw new NotFoundException("Invoice not found");

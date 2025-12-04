@@ -29,7 +29,7 @@ export class Customer {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop({ type: Types.ObjectId, ref: "Company" })
+  @Prop({ type: Types.ObjectId, ref: "Account" })
   companyId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: "User" })

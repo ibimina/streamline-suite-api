@@ -9,7 +9,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
 import { CreateCustomerDto } from "@/models/dto/customer/create-customer.dto";
 import { Customer, CustomerDocument } from "@/schemas/customer.schema";
-import { Company, CompanyDocument } from "@/schemas/company.schema";
+import { Account, AccountDocument } from "@/schemas/account.schema";
 import { UpdateCustomerDto } from "@/models/dto/customer/update-customer.dto";
 
 interface PaginationOptions {
@@ -25,16 +25,16 @@ export class CustomerService {
   constructor(
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
-    @InjectModel(Company.name)
-    private readonly companyModel: Model<CompanyDocument>
+    @InjectModel(Account.name)
+    private readonly companyModel: Model<AccountDocument>
   ) {}
 
   async createCustomer(
-      createDto: CreateCustomerDto,
-        companyId: string
+    createDto: CreateCustomerDto,
+    companyId: string
   ): Promise<CustomerDocument> {
-         const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
       throw new NotFoundException("Customer not found.");
     }
     const { email } = createDto as any;
@@ -45,7 +45,7 @@ export class CustomerService {
         .lean();
       if (exists) {
         throw new ConflictException(
-          "Customer with this email already exists for the company."
+          "Customer with this email already exists for the account."
         );
       }
     }
@@ -68,8 +68,8 @@ export class CustomerService {
     page: number;
     limit: number;
   }> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
       throw new NotFoundException("Customer not found.");
     }
 
@@ -90,8 +90,8 @@ export class CustomerService {
     id: string,
     companyId: string
   ): Promise<CustomerDocument> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
       throw new NotFoundException("Customer not found.");
     }
 
@@ -111,7 +111,7 @@ export class CustomerService {
       throw new NotFoundException("Customer not found.");
     }
 
-    // If updating email, ensure uniqueness within company
+    // If updating email, ensure uniqueness within account
     if ((updateDto as any).email) {
       const email = (updateDto as any).email.toLowerCase();
       const conflict = await this.customerModel
@@ -123,7 +123,7 @@ export class CustomerService {
         .lean();
       if (conflict) {
         throw new ConflictException(
-          "Another customer with this email exists for the company."
+          "Another customer with this email exists for the account."
         );
       }
       (updateDto as any).email = email;
@@ -133,13 +133,16 @@ export class CustomerService {
     return maybe.save();
   }
 
-  async deactivateCompanyCustomer(companyId:string,  id: string): Promise<void> {
+  async deactivateCompanyCustomer(
+    companyId: string,
+    id: string
+  ): Promise<void> {
     const res = await this.customerModel.findByIdAndDelete(id).exec();
     if (!res) {
       throw new NotFoundException("Customer not found.");
     }
   }
-  async deleteCompanyCustomer(companyId:string, id: string): Promise<void> {
+  async deleteCompanyCustomer(companyId: string, id: string): Promise<void> {
     const res = await this.customerModel.findByIdAndDelete(id).exec();
     if (!res) {
       throw new NotFoundException("Customer not found.");

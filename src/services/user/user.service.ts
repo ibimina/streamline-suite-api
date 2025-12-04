@@ -11,13 +11,11 @@ import { UpdateUserDto } from "@/models/dto/users/update-user.dto";
 import { CreateUserDto } from "@/models/dto/users/user.dto";
 import { User, UserDocument } from "@/schemas/user.schema";
 
-
 @Injectable()
 export class UserService {
-
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel("Company") private companyModel: Model<any>,
+    @InjectModel("Account") private companyModel: Model<any>
   ) {}
 
   async registerUser(
@@ -33,10 +31,10 @@ export class UserService {
     if (existingUser) {
       throw new ConflictException("User with this email already exists");
     }
-    //check if company exists
-    const company = await this.companyModel.findById(companyId);
-    if (!company) {
-      throw new BadRequestException("Company does not exist");
+    //check if account exists
+    const account = await this.companyModel.findById(companyId);
+    if (!account) {
+      throw new BadRequestException("Account does not exist");
     }
 
     // Hash password
@@ -56,19 +54,23 @@ export class UserService {
 
     await user.save();
 
-    await company.updateOne({ $push: { users: user._id } });
+    await account.updateOne({ $push: { users: user._id } });
   }
 
-    async updateUser(updateUserDto: UpdateUserDto, id: string, companyId: string) {
-      const user = await this.userModel.findOne({ _id: id, companyId });
-      if (!user) {
-        throw new NotFoundException("User not found");
-      }
-
-      // Update user fields
-      user.role = updateUserDto.role;
-      user.isActive = updateUserDto.isActive;
-
-      await user.save();
+  async updateUser(
+    updateUserDto: UpdateUserDto,
+    id: string,
+    companyId: string
+  ) {
+    const user = await this.userModel.findOne({ _id: id, companyId });
+    if (!user) {
+      throw new NotFoundException("User not found");
     }
+
+    // Update user fields
+    user.role = updateUserDto.role;
+    user.isActive = updateUserDto.isActive;
+
+    await user.save();
+  }
 }

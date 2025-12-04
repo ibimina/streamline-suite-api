@@ -80,7 +80,7 @@ export class EmailController {
     const success = await this.emailService.sendWelcomeEmail(
       to,
       "Test User",
-      "Test Company"
+      "Test Account"
     );
 
     return {

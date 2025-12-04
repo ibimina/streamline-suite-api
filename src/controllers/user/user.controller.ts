@@ -19,12 +19,12 @@ export class UserController {
   @ApiResponse({ status: 409, description: "User already exists" })
   async register(
     @Body() createUserDto: CreateUserDto,
-    @Req() req: Request & { user: { id: string; companyId: string } }
+    @Req() req: Request & { user: { id: string; accountId: string } }
   ) {
     return this.userService.registerUser(
       createUserDto,
       req.user.id,
-      req.user.companyId
+      req.user.accountId
     );
   }
 
@@ -35,12 +35,12 @@ export class UserController {
   @ApiResponse({ status: 404, description: "User not found" })
   async update(
     @Body() updateUserDto: UpdateUserDto,
-    @Req() req: Request & { user: { id: string; companyId: string } }
+    @Req() req: Request & { user: { id: string; accountId: string } }
   ) {
     return this.userService.updateUser(
       updateUserDto,
       req.user.id,
-      req.user.companyId
+      req.user.accountId
     );
   }
 }

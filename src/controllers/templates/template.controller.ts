@@ -25,13 +25,13 @@ export class TemplateController {
   @Post("")
   @ApiOperation({ summary: "Create a new template upload" })
   async uploadTemplate(
-    @Req() req: Request & { user: { companyId: string } },
+    @Req() req: Request & { user: { accountId: string } },
     @Body() uploadFileDto: UploadFileDto
   ) {
     try {
       const result = await this.templateService.uploadTemplate(
         uploadFileDto,
-        req.user.companyId
+        req.user.accountId
       );
       if (result) {
         return {
@@ -51,19 +51,20 @@ export class TemplateController {
   }
 
   @Get("")
-  @ApiOperation({ summary: "Get all templates for a company" })
-  async getAllTemplates( @Req() req: Request & { user: { companyId: string } },
-) {
+  @ApiOperation({ summary: "Get all templates for a account" })
+  async getAllTemplates(@Req() req: Request & { user: { accountId: string } }) {
     try {
-      const templates = await this.templateService.getAllTemplates(req.user.companyId);
+      const templates = await this.templateService.getAllTemplates(
+        req.user.accountId
+      );
       if (templates) {
         return {
           payload: templates,
           message: "Templates fetched successfully",
-          status: HttpStatus.OK
-        }
+          status: HttpStatus.OK,
+        };
       }
-      return undefined
+      return undefined;
     } catch (error) {
       console.error(
         "Error occured in Template Controller in - getAllTemplates",
@@ -76,18 +77,20 @@ export class TemplateController {
   @Delete(":id")
   @ApiOperation({ summary: "" })
   async deleteTemplates(
-    @Req() req: Request & { user: { companyId: string } },
+    @Req() req: Request & { user: { accountId: string } },
     id: string
   ) {
     try {
-      await this.templateService.deleteTemplate(req.user.companyId, id);
+      await this.templateService.deleteTemplate(req.user.accountId, id);
       return {
-      message:"Template deletion successful"
-    }
+        message: "Template deletion successful",
+      };
     } catch (error) {
-      console.error("Error occured in Template Controller in - deleteTemplates",  JSON.stringify(error))
+      console.error(
+        "Error occured in Template Controller in - deleteTemplates",
+        JSON.stringify(error)
+      );
       throw error;
     }
   }
-
 }

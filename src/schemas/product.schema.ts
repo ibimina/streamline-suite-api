@@ -79,6 +79,9 @@ export class Product {
 
   @Prop()
   createdBy: string;
+
+  @Prop({type: String, enum: ["stock_out", "stock_in", "discontinued"], default: "active"})
+  status: string;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

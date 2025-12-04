@@ -13,10 +13,8 @@ import {
   PaginationQuery,
   PaginatedResponse,
 } from "@/common/types";
-import { Company, CompanyDocument } from "@/schemas/company.schema";
-import {
-  BaseFinancialService,
-} from "@/common/utils/financial-calculator";
+import { Account, AccountDocument } from "@/schemas/account.schema";
+import { BaseFinancialService } from "@/common/utils/financial-calculator";
 import { Customer, CustomerDocument } from "@/schemas/customer.schema";
 
 @Injectable()
@@ -24,10 +22,10 @@ export class QuotationsService extends BaseFinancialService {
   constructor(
     @InjectModel(Quotation.name)
     private quotationModel: Model<QuotationDocument>,
-    @InjectModel(Company.name)
-    private companyModel: Model<CompanyDocument>,
+    @InjectModel(Account.name)
+    private companyModel: Model<AccountDocument>,
     @InjectModel(Customer.name)
-    private customerModel: Model<CustomerDocument>,
+    private customerModel: Model<CustomerDocument>
   ) {
     super();
   }
@@ -37,23 +35,23 @@ export class QuotationsService extends BaseFinancialService {
     companyId: ObjectId,
     userId: string
   ): Promise<Quotation> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     // Verify customer exists
     const customer = await this.customerModel
       .findById(createQuotationDto.customer)
       .exec();
-    
+
     if (!customer) {
       throw new NotFoundException("Customer not found");
     }
 
     // Generate quotation number
     const lastQuotation = await this.quotationModel
-      .findOne({ companyId: company._id })
+      .findOne({ companyId: account._id })
       .sort({ createdAt: -1 })
       .exec();
 
@@ -64,9 +62,7 @@ export class QuotationsService extends BaseFinancialService {
     }
 
     // Enhanced financial calculations with profit tracking
-    const financials = this.processInvoiceFinancials(
-      createQuotationDto.items,
-    );
+    const financials = this.processInvoiceFinancials(createQuotationDto.items);
 
     const quotation = new this.quotationModel({
       ...createQuotationDto,
@@ -82,9 +78,9 @@ export class QuotationsService extends BaseFinancialService {
     companyId: string,
     query: PaginationQuery
   ): Promise<PaginatedResponse<Quotation>> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const {
@@ -96,7 +92,7 @@ export class QuotationsService extends BaseFinancialService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const filter: any = { companyId: company._id };
+    const filter: any = { companyId: account._id };
 
     if (search) {
       // Search in quotation number or populate customer name/email
@@ -122,13 +118,13 @@ export class QuotationsService extends BaseFinancialService {
   }
 
   async findOne(id: string, companyId: string): Promise<Quotation> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const quotation = await this.quotationModel
-      .findOne({ _id: id, companyId: company._id })
+      .findOne({ _id: id, companyId: account._id })
       .populate("createdBy", "firstName lastName email")
       .populate("customer", "name email phone address taxId")
       .populate("items.product", "name description")
@@ -146,14 +142,14 @@ export class QuotationsService extends BaseFinancialService {
     updateQuotationDto: UpdateQuotationDto,
     companyId: string
   ): Promise<Quotation> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const quotation = await this.quotationModel.findOne({
       _id: id,
-      companyId: company._id,
+      companyId: account._id,
     });
 
     if (!quotation) {
@@ -170,14 +166,12 @@ export class QuotationsService extends BaseFinancialService {
     }
 
     let updateData: any = { ...updateQuotationDto };
-    let financials =  {};
+    let financials = {};
 
     if (updateQuotationDto.items) {
       // Recalculate financials with new items
-       financials = this.processQuotationFinancials(
-        updateQuotationDto.items      );
+      financials = this.processQuotationFinancials(updateQuotationDto.items);
 
-  
       updateData = {
         ...updateData,
         ...financials,
@@ -192,14 +186,14 @@ export class QuotationsService extends BaseFinancialService {
   }
 
   async remove(id: string, companyId: string): Promise<void> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
 
     const quotation = await this.quotationModel.findOne({
       _id: id,
-      companyId: company._id,
+      companyId: account._id,
     });
 
     if (
@@ -219,9 +213,9 @@ export class QuotationsService extends BaseFinancialService {
     status: QuotationStatus,
     companyId: string
   ): Promise<Quotation> {
-    const company = await this.companyModel.findById(companyId).exec();
-    if (!company) {
-      throw new NotFoundException("Company not found");
+    const account = await this.companyModel.findById(companyId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
     }
     const updateData: any = { status };
 
@@ -235,7 +229,7 @@ export class QuotationsService extends BaseFinancialService {
     }
 
     return this.quotationModel
-      .findOneAndUpdate({ _id: id, companyId: company._id }, updateData, {
+      .findOneAndUpdate({ _id: id, companyId: account._id }, updateData, {
         new: true,
       })
       .populate("createdBy", "firstName lastName email")

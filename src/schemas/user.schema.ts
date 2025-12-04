@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 import { UserRole } from "@/common/types";
+import { PermissionName, RoleName } from "@/models/enums/shared.enum";
 
 export type UserDocument = User & Document;
 
@@ -25,21 +26,13 @@ export class User {
 
   @Prop({
     type: String,
-    enum: [
-      "owner",
-      "admin",
-      "sales",
-      "procurement",
-      "accountant",
-      "warehouse",
-      "staff",
-    ],
-    default: "staff",
+    enum:RoleName,
+    default: "Staff",
   })
   role: string;
 
-  @Prop({ type: Types.ObjectId, ref: "Company" })
-  companyId?: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: "Account" })
+  account: Types.ObjectId;
 
   // HR/Payroll fields
   @Prop({ default: 0 })
@@ -79,6 +72,12 @@ export class User {
 
   @Prop({ type: Types.ObjectId, ref: "User" })
   createdBy?: Types.ObjectId;
+
+  @Prop({ type: [String], default: [], enum: PermissionName })
+  permissions?: string[];
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  updatedBy?: Types.ObjectId;
 
   @Prop({ default: Date.now })
   createdAt: Date;

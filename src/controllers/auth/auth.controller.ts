@@ -27,10 +27,10 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post("registerCompany")
-  @ApiOperation({ summary: "Register a new company" })
-  @ApiResponse({ status: 201, description: "Company registered successfully" })
-  @ApiResponse({ status: 409, description: "Company already exists" })
+  @Post("createAccount")
+  @ApiOperation({ summary: "Register a new account" })
+  @ApiResponse({ status: 201, description: "Account registered successfully" })
+  @ApiResponse({ status: 409, description: "Account already exists" })
   async registerCompany(
     @Body() createCompanyandUserDto: CreateCompanyandUserDto
   ) {
@@ -130,5 +130,4 @@ export class AuthController {
   async getBlacklistStats() {
     return this.authService.getBlacklistStats();
   }
-
 }

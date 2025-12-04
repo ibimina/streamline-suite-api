@@ -19,9 +19,6 @@ export class RolesGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    console.log('=====================token', request.headers.authorization);
-    const { user } = context.switchToHttp().getRequest();
-    console.log('=====================user', user);
 
     // Get required roles from decorator
     const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(
@@ -29,8 +26,8 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()]
     );
 
-        const token = this.extractTokenFromHeader(request);
-    console.log('=====================token', token);
+    const token = this.extractTokenFromHeader(request);
+    console.log("================= token", token)
     console.log('=====================requiredRoles', requiredRoles);
 
       if (!token || !requiredRoles) {
@@ -48,17 +45,6 @@ export class RolesGuard implements CanActivate {
       console.log('====error in canActivate', JSON.stringify(error));
       throw new UnauthorizedException();
     }
-
-    // Check if user has any of the required roles
-    // const hasRole = requiredRoles.some((role) => user.role === role);
-
-    // if (!hasRole) {
-    //   throw new ForbiddenException(
-    //     `Access denied. Required roles: ${requiredRoles.join(", ")}`
-    //   );
-    // }
-
-    // return true;
   }
   private extractTokenFromHeader(request: Request): string | undefined {
     const [type, token] = request.headers.authorization?.split(' ') ?? [];

@@ -75,5 +75,12 @@ export enum InventoryTransactionStatus {
   ADJUSTMENT = "adjustment", // Damage, theft, correction
   TRANSFER = "transfer", // Future: warehouse to warehouse
   PRODUCTION_IN = "production_in", // Future: manufacturing
-  PRODUCTION_OUT = "production_out",
+  PRODUCTION_OUT = "production_out", 
+  COMPLETED = "completed",
+}
+
+export enum InventoryMovementType {
+  STOCK_OUT = "stock_out",
+  STOCK_IN = "stock_in",
+  DISCONTINUED = "discontinued",
 }

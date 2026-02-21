@@ -5,9 +5,11 @@ import {
   IsBoolean,
   IsArray,
   IsEnum,
+  IsMongoId,
   Min,
   Max,
 } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 export class CreateProductDto {
   @IsOptional()
@@ -37,10 +39,26 @@ export class CreateProductDto {
   @IsBoolean()
   trackSerialNumber?: boolean;
 
+  @ApiPropertyOptional({
+    description: "Whether to track expiry dates for this product",
+    example: false,
+  })
   @IsOptional()
   @IsBoolean()
   trackExpiryDate?: boolean;
 
+  @ApiPropertyOptional({
+    description: "Product expiry date (ISO date string)",
+    example: "2024-12-31",
+  })
+  @IsOptional()
+  @IsString()
+  expiryDate?: string;
+
+  @ApiPropertyOptional({
+    description: "Cost price of the product",
+    example: 10.99,
+  })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -65,12 +83,34 @@ export class CreateProductDto {
   lowStockAlert?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  currentStock?: number;
+
+  @IsOptional()
   @IsString()
   category?: string;
 
   @IsOptional()
   @IsString()
   brand?: string;
+
+  @ApiPropertyOptional({
+    description: "Primary supplier ID",
+    example: "507f1f77bcf86cd799439011",
+  })
+  @IsOptional()
+  @IsMongoId()
+  supplier?: string;
+
+  @ApiPropertyOptional({
+    description: "Alternative supplier IDs",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
+  alternativeSuppliers?: string[];
 
   @IsOptional()
   @IsArray()

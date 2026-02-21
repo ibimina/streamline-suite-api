@@ -23,7 +23,7 @@ export class EmailService {
   private createTransporter() {
     const emailProvider = this.configService.get<string>(
       "EMAIL_PROVIDER",
-      "smtp"
+      "smtp",
     );
 
     switch (emailProvider) {
@@ -102,7 +102,7 @@ export class EmailService {
 
       const result = await this.transporter.sendMail(mailOptions);
       this.logger.log(
-        `Email sent successfully to ${options.to}: ${result.messageId}`
+        `Email sent successfully to ${options.to}: ${result.messageId}`,
       );
       return true;
     } catch (error) {
@@ -115,7 +115,7 @@ export class EmailService {
   async sendOtpEmail(
     email: string,
     otp: string,
-    firstName: string
+    firstName: string,
   ): Promise<boolean> {
     const html = `
       <!DOCTYPE html>
@@ -170,7 +170,7 @@ export class EmailService {
   async sendWelcomeEmail(
     email: string,
     firstName: string,
-    companyName?: string
+    companyName?: string,
   ): Promise<boolean> {
     const html = `
       <!DOCTYPE html>
@@ -239,7 +239,7 @@ export class EmailService {
   async sendPasswordResetEmail(
     email: string,
     firstName: string,
-    resetToken: string
+    resetToken: string,
   ): Promise<boolean> {
     const resetUrl = `${this.configService.get("FRONTEND_URL")}/reset-password?token=${resetToken}`;
 
@@ -310,7 +310,7 @@ export class EmailService {
     invoiceNumber: string,
     amount: number,
     dueDate: Date,
-    downloadUrl?: string
+    downloadUrl?: string,
   ): Promise<boolean> {
     const html = `
       <!DOCTYPE html>
@@ -377,10 +377,10 @@ export class EmailService {
   async sendQuotationEmail(
     email: string,
     clientName: string,
-    quotationNumber: string,
+    uniqueId: string,
     amount: number,
     expiryDate: Date,
-    downloadUrl?: string
+    downloadUrl?: string,
   ): Promise<boolean> {
     const html = `
       <!DOCTYPE html>
@@ -411,7 +411,7 @@ export class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>Quotation ${quotationNumber}</h1>
+            <h1>Quotation ${uniqueId}</h1>
           </div>
           <div class="content">
             <h2>Hello ${clientName}!</h2>
@@ -419,7 +419,7 @@ export class EmailService {
             
             <div class="quotation-details">
               <h3>Quotation Details:</h3>
-              <p><strong>Quotation Number:</strong> ${quotationNumber}</p>
+              <p><strong>Quotation Number:</strong> ${uniqueId}</p>
               <p><strong>Total Amount:</strong> $${amount.toFixed(2)}</p>
               <p><strong>Valid Until:</strong> ${expiryDate.toLocaleDateString()}</p>
             </div>
@@ -438,7 +438,7 @@ export class EmailService {
 
     return this.sendEmail({
       to: email,
-      subject: `Quotation ${quotationNumber} - ${clientName}`,
+      subject: `Quotation ${uniqueId} - ${clientName}`,
       html,
     });
   }

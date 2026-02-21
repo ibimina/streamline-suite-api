@@ -1,12 +1,12 @@
 import { Document, Types } from "mongoose";
 import { InvoiceStatus } from "@/common/types";
-import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 
 export type InvoiceDocument = Invoice & Document;
 
 @Schema({ timestamps: true })
 export class InvoiceItem {
-  @Prop({ type: Types.ObjectId, ref: 'Product' })
+  @Prop({ type: Types.ObjectId, ref: "Product" })
   product?: Types.ObjectId;
 
   @Prop({ required: true })
@@ -21,54 +21,55 @@ export class InvoiceItem {
   @Prop({ default: 0 })
   discountPercent: number;
 
-  @Prop()
+  @Prop({ default: 0 })
   discountAmount: number;
 
-  // VAT
-  @Prop({ required: true })
+  // VAT per line
+  @Prop({ default: 0 })
   vatRate: number;
 
-  @Prop()
+  @Prop({ default: 0 })
   vatAmount: number;
 
-  @Prop({ default: true })
-  subjectToWHT: boolean;
-
-  @Prop()
-  whtRate: number;
-
-  @Prop()
-  whtAmount: number;
-
   // Cost & Profit
-  @Prop({ required: true })
+  @Prop({ default: 0 })
   unitCost: number;
 
-  @Prop()
+  @Prop({ default: 0 })
   totalCost: number;
 
-  @Prop()
-  lineTotalExclTax: number;
+  // Line totals (calculated)
+  @Prop({ default: 0 })
+  lineTotal: number; // After discount, before VAT
 
-  @Prop()
-  lineTotalInclTax: number;
+  @Prop({ default: 0 })
+  lineTotalInclVat: number; // After discount + VAT
 
-  @Prop()
-  profitBeforeWHT: number;
+  @Prop({ default: 0 })
+  whtAmount: number; // WHT amount per line
 
-  @Prop()
-  profitAfterWHT: number;
+  @Prop({ default: 0 })
+  netReceivable: number; // lineTotalInclVat - whtAmount
+
+  @Prop({ default: 0 })
+  grossProfit: number; // Profit before WHT
+
+  @Prop({ default: 0 })
+  netProfit: number; // Profit after WHT
 }
 
 @Schema({ timestamps: true })
 export class Invoice extends Document {
-  @Prop({ unique: true, required: true })
-  invoiceNumber: string;
+  @Prop({ type: Types.ObjectId, ref: "Account", required: true })
+  account: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Quotation',  })
+  @Prop({ unique: true })
+  uniqueId: string;
+
+  @Prop({ type: Types.ObjectId, ref: "Quotation" })
   quotation?: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
+  @Prop({ type: Types.ObjectId, ref: "Customer", required: true })
   customer: Types.ObjectId;
 
   @Prop({ type: [InvoiceItem], default: [] })
@@ -77,7 +78,17 @@ export class Invoice extends Document {
   @Prop({ enum: InvoiceStatus, default: InvoiceStatus.DRAFT })
   status: InvoiceStatus;
 
-  @Prop() dueDate: Date;
+  @Prop()
+  issuedDate: Date;
+
+  @Prop()
+  dueDate: Date;
+
+  @Prop()
+  poNumber?: string; // Purchase Order number
+
+  @Prop({ default: 0 })
+  whtRate: number; // Withholding tax rate at invoice level
 
   @Prop()
   notes?: string;
@@ -94,11 +105,22 @@ export class Invoice extends Document {
   @Prop()
   accentColor?: string;
 
-  @Prop({ type: [{ amount: Number, date: Date, method: String }], default: [] })
-  payments: { amount: number; date: Date; method: string }[];
+  @Prop({
+    type: [{ amount: Number, date: Date, method: String, reference: String }],
+    default: [],
+  })
+  payments: {
+    amount: number;
+    date: Date;
+    method: string;
+    reference?: string;
+  }[];
 
-  @Prop() amountPaid: number;
-  @Prop() balanceDue: number;
+  @Prop({ default: 0 })
+  amountPaid: number;
+
+  @Prop({ default: 0 })
+  balanceDue: number;
 
   @Prop()
   sentDate?: Date;
@@ -106,24 +128,53 @@ export class Invoice extends Document {
   @Prop()
   paidDate?: Date;
 
-  // Totals
-  @Prop() subtotalExclTax: number;
-  @Prop() totalDiscount: number;
-  @Prop() totalVat: number;
-  @Prop() totalWHT: number;
-  @Prop() grandTotal: number;
+  // Totals (calculated)
+  @Prop({ default: 0 })
+  subtotal: number; // Sum of line subtotals (qty * price)
+
+  @Prop({ default: 0 })
+  totalDiscount: number;
+
+  @Prop({ default: 0 })
+  totalVat: number;
+
+  @Prop({ default: 0 })
+  totalWht: number;
+
+  @Prop({ default: 0 })
+  grandTotal: number; // subtotal - discount + VAT
+
+  @Prop({ default: 0 })
+  netReceivable: number; // grandTotal - WHT
 
   // Profit Summary
-  @Prop() totalCost: number;
-  @Prop() totalGrossProfit: number;
-  @Prop() totalNetProfit: number;
-  @Prop() grossProfitMargin: number;  // % of Revenue
-  // Revenue - COGS
-  @Prop() netReceivable: number;   // Revenue - WHT
-  @Prop() netProfitMargin: number;  // % of Net Receivable
-  
+  @Prop({ default: 0 })
+  totalCost: number;
+
+  @Prop({ default: 0 })
+  expectedGrossProfit: number;
+
+  @Prop({ default: 0 })
+  expectedNetProfit: number;
+
+  @Prop({ default: 0 })
+  expectedGrossProfitMargin: number;
+
+  @Prop({ default: 0 })
+  expectedNetProfitMargin: number;
+
+  // Legacy fields for backwards compatibility
+  @Prop({ default: 0 })
+  expectedProfit: number;
+
+  @Prop({ default: 0 })
+  expectedProfitMargin: number;
+
+  @Prop({ type: Types.ObjectId, ref: "User", required: true })
+  createdBy: Types.ObjectId;
 }
 
 export const InvoiceSchema = SchemaFactory.createForClass(Invoice);
-InvoiceSchema.index({ invoiceNumber: 1 });
+InvoiceSchema.index({ uniqueId: 1 });
 InvoiceSchema.index({ customer: 1, status: 1 });
+InvoiceSchema.index({ account: 1, createdAt: -1 });

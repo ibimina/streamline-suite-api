@@ -4,12 +4,14 @@ import {
   BadRequestException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import { Invoice, InvoiceDocument } from "@/schemas/invoice.schema";
+import { Quotation, QuotationDocument } from "@/schemas/quotation.schema";
 import { CreateInvoiceDto } from "@/models/dto/invoices/create-invoice.dto";
 import { UpdateInvoiceDto } from "@/models/dto/invoices/update-invoice.dto";
 import {
   InvoiceStatus,
+  QuotationStatus,
   PaginationQuery,
   PaginatedResponse,
 } from "@/common/types";
@@ -20,51 +22,122 @@ import { BaseFinancialService } from "@/common/utils/financial-calculator";
 export class InvoicesService extends BaseFinancialService {
   constructor(
     @InjectModel(Invoice.name) private invoiceModel: Model<InvoiceDocument>,
-    @InjectModel(Account.name) private companyModel: Model<AccountDocument>
+    @InjectModel(Quotation.name)
+    private quotationModel: Model<QuotationDocument>,
+    @InjectModel(Account.name) private accountModel: Model<AccountDocument>,
   ) {
     super();
   }
 
   async create(
     createInvoiceDto: CreateInvoiceDto,
-    companyId: string,
-    userId: string
+    accountId: string,
+    userId: string,
   ): Promise<Invoice> {
     // Generate invoice number
 
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
 
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
+    // Validate and link quotation if provided
+    let linkedQuotation: QuotationDocument | null = null;
+    if (createInvoiceDto.quotation) {
+      linkedQuotation = await this.quotationModel
+        .findOne({
+          _id: createInvoiceDto.quotation,
+          account: account._id,
+        })
+        .exec();
+
+      if (!linkedQuotation) {
+        throw new NotFoundException("Quotation not found");
+      }
+
+      if (linkedQuotation.convertedToInvoice) {
+        throw new BadRequestException(
+          "Quotation has already been converted to an invoice",
+        );
+      }
+    }
+
     const lastInvoice = await this.invoiceModel
-      .findOne({ companyId: account._id })
+      .findOne({ account: account._id })
       .sort({ createdAt: -1 })
       .exec();
 
-    let invoiceNumber = "INV-001";
+    let uniqueId = "INV-001";
     if (lastInvoice) {
-      const lastNumber = parseInt(lastInvoice.invoiceNumber.split("-")[1]);
-      invoiceNumber = `INV-${(lastNumber + 1).toString().padStart(3, "0")}`;
+      const lastNumber = parseInt(lastInvoice.uniqueId.split("-")[1]);
+      uniqueId = `INV-${(lastNumber + 1).toString().padStart(3, "0")}`;
     }
 
     const financials = this.processInvoiceFinancials(createInvoiceDto.items);
+    const processedItems = financials.items.map((item, index) => ({
+      ...item,
+      description: createInvoiceDto.items[index].description || "",
+      product: createInvoiceDto.items[index].product,
+    }));
 
     const invoice = new this.invoiceModel({
       ...createInvoiceDto,
       ...financials,
-      invoiceNumber,
-      companyId,
+      items: processedItems,
+      uniqueId,
+      account: account._id,
+      quotation: linkedQuotation?._id || null,
       createdBy: userId,
     });
 
-    return invoice.save();
+    const savedInvoice = await invoice.save();
+
+    // Mark quotation as converted if linked
+    if (linkedQuotation) {
+      await this.quotationModel.findByIdAndUpdate(linkedQuotation._id, {
+        convertedToInvoice: true,
+        status: QuotationStatus.ACCEPTED,
+      });
+    }
+
+    return savedInvoice;
+  }
+
+  /**
+   * Get quotations available for linking (not yet converted)
+   */
+  async getAvailableQuotationsForLinking(
+    accountId: string,
+    customerId?: string,
+  ): Promise<Quotation[]> {
+    const account = await this.accountModel.findById(accountId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
+    }
+
+    const filter: any = {
+      account: account._id,
+      convertedToInvoice: { $ne: true },
+      status: { $nin: [QuotationStatus.REJECTED, QuotationStatus.EXPIRED] },
+    };
+
+    // Filter by customer if provided
+    if (customerId) {
+      filter.customer = new Types.ObjectId(customerId);
+    }
+
+    return this.quotationModel
+      .find(filter)
+      .populate("customer", "companyName email")
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .exec();
   }
 
   async findAll(
-    companyId: string,
-    query: PaginationQuery
+    accountId: string,
+    query: PaginationQuery,
   ): Promise<PaginatedResponse<Invoice>> {
     const {
       page = 1,
@@ -74,7 +147,7 @@ export class InvoicesService extends BaseFinancialService {
       sortOrder = "desc",
     } = query;
 
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
 
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -82,7 +155,7 @@ export class InvoicesService extends BaseFinancialService {
 
     const skip = (page - 1) * limit;
 
-    const filter: any = { companyId: account._id };
+    const filter: any = { account: account._id };
 
     if (search) {
       filter.$or = [
@@ -98,7 +171,8 @@ export class InvoicesService extends BaseFinancialService {
         .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
         .skip(skip)
         .limit(limit)
-        .populate("createdBy", "name email")
+        .populate("createdBy", "firstName lastName email")
+        .populate("customer", "companyName email phone billingAddress")
         .exec(),
       this.invoiceModel.countDocuments(filter).exec(),
     ]);
@@ -109,16 +183,21 @@ export class InvoicesService extends BaseFinancialService {
     };
   }
 
-  async findOne(id: string, companyId: string): Promise<Invoice> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async findOne(id: string, accountId: string): Promise<Invoice> {
+    const account = await this.accountModel.findById(accountId).exec();
 
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .populate("createdBy", "name email")
+      .populate("customer", "companyName email phone billingAddress taxId")
+      .populate({
+        path: "items.product",
+        select: "name description sku sellingPrice costPrice",
+      })
       .exec();
 
     if (!invoice) {
@@ -131,15 +210,15 @@ export class InvoicesService extends BaseFinancialService {
   async update(
     id: string,
     updateInvoiceDto: UpdateInvoiceDto,
-    companyId: string
+    accountId: string,
   ): Promise<Invoice> {
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .exec();
 
     if (!invoice) {
@@ -162,14 +241,14 @@ export class InvoicesService extends BaseFinancialService {
       .exec();
   }
 
-  async remove(id: string, companyId: string): Promise<void> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async remove(id: string, accountId: string): Promise<void> {
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .exec();
     if (!invoice) {
       throw new NotFoundException("Invoice not found");
@@ -185,15 +264,15 @@ export class InvoicesService extends BaseFinancialService {
   async updateStatus(
     id: string,
     status: InvoiceStatus,
-    companyId: string
+    accountId: string,
   ): Promise<Invoice> {
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const invoice = await this.invoiceModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .exec();
     if (!invoice) {
       throw new NotFoundException("Invoice not found");
@@ -213,9 +292,9 @@ export class InvoicesService extends BaseFinancialService {
       .exec();
   }
 
-  async getStats(companyId: string): Promise<any> {
+  async getStats(accountId: string): Promise<any> {
     const stats = await this.invoiceModel.aggregate([
-      { $match: { companyId } },
+      { $match: { accountId } },
       {
         $group: {
           _id: "$status",

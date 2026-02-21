@@ -1,116 +1,130 @@
 import {
   IsString,
-  IsOptional,
-  IsArray,
   IsNumber,
-  IsDateString,
+  IsArray,
   ValidateNested,
+  IsOptional,
+  IsDateString,
   Min,
   Max,
   IsEnum,
-  ArrayMinSize,
-  IsBoolean,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { InvoiceStatus } from "@/common/types";
 
-export class ItemDto {
-  @ApiPropertyOptional()
+export class CreateInvoiceItemDto {
+  @ApiPropertyOptional({ description: "Product ID reference" })
   @IsOptional()
   @IsString()
-  product?: string; // Product ObjectId reference
+  product?: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: "Item description" })
   @IsString()
   description: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: "Quantity", minimum: 1 })
   @IsNumber()
   @Min(1)
   quantity: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: "Unit price", minimum: 0 })
   @IsNumber()
   @Min(0)
   unitPrice: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: "Unit cost for profit calculation",
+    default: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitCost?: number;
+
+  @ApiPropertyOptional({ description: "Discount percentage", default: 0 })
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100)
   discountPercent?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: "VAT rate percentage", default: 0 })
   @IsNumber()
   @Min(0)
   @Max(100)
-  vatRate: number; // Required VAT rate per item
-
-  @ApiPropertyOptional()
-  @IsBoolean()
-  subjectToWHT?: boolean; // Whether this item is subject to withholding tax
-
-  @ApiPropertyOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  whtRate?: number; // Withholding tax rate for this item
-
-  @ApiProperty()
-  @IsNumber()
-  @Min(0)
-  unitCost: number; // Required for profit calculation
+  vatRate?: number;
 }
 
 export class CreateInvoiceDto {
-  @ApiPropertyOptional()
+  @ApiProperty({ description: "Customer ID" })
+  @IsString()
+  customer: string;
+
+  @ApiPropertyOptional({ description: "Quotation ID to link this invoice to" })
   @IsOptional()
   @IsString()
-  quotation?: string; // Quotation ObjectId reference
+  quotation?: string;
 
-  @ApiProperty()
-  @IsString()
-  customer: string; // Customer ObjectId reference (required)
-
-  @ApiProperty()
+  @ApiProperty({
+    description: "Invoice line items",
+    type: [CreateInvoiceItemDto],
+  })
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
-  @Type(() => ItemDto)
-  items: ItemDto[];
+  @Type(() => CreateInvoiceItemDto)
+  items: CreateInvoiceItemDto[];
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: "Invoice status",
+    enum: InvoiceStatus,
+    default: InvoiceStatus.DRAFT,
+  })
   @IsOptional()
   @IsEnum(InvoiceStatus)
   status?: InvoiceStatus;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Issue date" })
   @IsOptional()
   @IsDateString()
-  dueDate?: Date;
+  issuedDate?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Due date" })
+  @IsOptional()
+  @IsDateString()
+  dueDate?: string;
+
+  @ApiPropertyOptional({ description: "Purchase Order number" })
+  @IsOptional()
+  @IsString()
+  poNumber?: string;
+
+  @ApiPropertyOptional({
+    description: "Withholding tax rate percentage",
+    default: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  whtRate?: number;
+
+  @ApiPropertyOptional({ description: "Notes" })
   @IsOptional()
   @IsString()
   notes?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Terms and conditions" })
   @IsOptional()
   @IsString()
   terms?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Template name" })
   @IsOptional()
   @IsString()
   template?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  templateId?: string;
-
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: "Accent color" })
   @IsOptional()
   @IsString()
   accentColor?: string;

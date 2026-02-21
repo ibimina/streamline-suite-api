@@ -51,7 +51,10 @@ export class AuthService {
       email: createCompanyandUserDto.email,
       address: createCompanyandUserDto.address,
       country: createCompanyandUserDto.country,
-      description: createCompanyandUserDto.description,
+      industry: createCompanyandUserDto.industry,
+      phoneNumber: createCompanyandUserDto.phoneNumber,
+      companySize: createCompanyandUserDto.companySize,
+
     });
 
     await account.save();
@@ -75,31 +78,23 @@ export class AuthService {
 
     await user.save();
 
-
     // Link user to account
-
-
     await this.accountModel
       .updateOne({ _id: account._id }, { users: [user._id], ownerId: user._id })
       .exec();
 
-    // Reload the account from DB and populate users to ensure populated data is returned
-    const populatedAccount = await this.accountModel
-      .findById(account._id)
-      .populate("users")
-      .exec();
-
     // Generate tokens
     const tokens = await this.generateTokens(user);
+    await user.populate({
+      path: "account",
+      populate: "users",
+    });
 
-    await user.populate("account users");
-    // Return user without password
     const { password, _id, ...userResult } = user.toObject();
 
     return {
       user: userResult,
       ...tokens,
-      account: populatedAccount,
     };
   }
 
@@ -126,7 +121,7 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user);
 
-     user.populate({
+    await user.populate({
         path: "account",
         populate: "users",
       })
@@ -150,14 +145,20 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken);
-      const user = await this.userModel.findById(payload.sub);
+      const user = await this.userModel.findById(payload.id);
 
       if (!user || !user.isActive) {
         throw new UnauthorizedException("User not found or inactive");
       }
 
+      // Verify token version matches (for token invalidation)
+      if (payload.tokenVersion !== user.tokenVersion) {
+        throw new UnauthorizedException("Token has been revoked");
+      }
+
       return this.generateTokens(user);
     } catch (error) {
+      console.error("Refresh token error:", error);
       throw new UnauthorizedException("Invalid refresh token");
     }
   }

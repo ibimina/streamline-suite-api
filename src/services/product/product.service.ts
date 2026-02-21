@@ -68,7 +68,10 @@ export class ProductService {
   async findAll(
     companyId: string,
     query: PaginationQuery
-  ): Promise<PaginatedResponse<Product>> {
+  ): Promise<{
+    products: Product[]
+    total: number
+  }> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -102,12 +105,14 @@ export class ProductService {
         .skip(skip)
         .limit(limit)
         .populate("createdBy", "firstName lastName email")
+        .populate("supplier", "name p")
+        .populate("alternativeSuppliers", "name")
         .exec(),
       this.productModel.countDocuments(filter).exec(),
     ]);
 
     return {
-      data: products,
+      products,
       total,
     };
   }
@@ -121,6 +126,8 @@ export class ProductService {
     const product = await this.productModel
       .findOne({ _id: id, companyId: account._id })
       .populate("createdBy", "firstName lastName email")
+      .populate("supplier", "name")
+      .populate("alternativeSuppliers", "name")
       .exec();
 
     if (!product) {
@@ -157,6 +164,8 @@ export class ProductService {
         new: true,
       })
       .populate("createdBy", "firstName lastName email")
+      .populate("supplier", "name")
+      .populate("alternativeSuppliers", "name")
       .exec();
 
     if (!product) {

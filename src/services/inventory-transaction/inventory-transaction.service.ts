@@ -28,7 +28,7 @@ export class InventoryTransactionService {
     @InjectModel(Account.name) private companyModel: Model<AccountDocument>
   ) {}
 
-  async create(
+  async createInventoryTransaction(
     createInventoryTransactionDto: CreateInventoryTransactionDto,
     companyId: string,
     userId: string
@@ -120,7 +120,7 @@ export class InventoryTransactionService {
     return savedTransaction;
   }
 
-  async findAll(
+  async findAllInventoryTransactions(
     companyId: string,
     query: PaginationQuery & {
       productId?: string;
@@ -128,7 +128,7 @@ export class InventoryTransactionService {
       status?: string;
       warehouseId?: string;
     }
-  ): Promise<PaginatedResponse<InventoryTransaction>> {
+  ): Promise<{ inventoryTransactions: InventoryTransaction[]; total: number }> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -186,12 +186,12 @@ export class InventoryTransactionService {
     ]);
 
     return {
-      data: transactions,
+      inventoryTransactions: transactions,
       total,
     };
   }
 
-  async findOne(id: string, companyId: string): Promise<InventoryTransaction> {
+  async findByIdInventoryTransaction(id: string, companyId: string): Promise<InventoryTransaction> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -211,7 +211,7 @@ export class InventoryTransactionService {
     return transaction;
   }
 
-  async update(
+  async updateInventoryTransaction(
     id: string,
     updateInventoryTransactionDto: UpdateInventoryTransactionDto,
     companyId: string
@@ -264,7 +264,7 @@ export class InventoryTransactionService {
     return transaction!;
   }
 
-  async remove(id: string, companyId: string): Promise<void> {
+  async removeInventoryTransaction(id: string, companyId: string): Promise<void> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -288,7 +288,7 @@ export class InventoryTransactionService {
     await this.inventoryTransactionModel.findByIdAndDelete(id).exec();
   }
 
-  async getTransactionHistory(
+  async getInventoryTransactionHistory(
     productId: string,
     companyId: string
   ): Promise<InventoryTransaction[]> {
@@ -317,7 +317,7 @@ export class InventoryTransactionService {
       .exec();
   }
 
-  async getStats(companyId: string): Promise<any> {
+  async getInventoryTransactionStats(companyId: string): Promise<any> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");

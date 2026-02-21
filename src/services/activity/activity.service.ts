@@ -21,16 +21,14 @@ export interface CreateActivityDto {
 @Injectable()
 export class ActivityService {
   constructor(
-    @InjectModel(Activity.name) private activityModel: Model<ActivityDocument>
+    @InjectModel(Activity.name) private activityModel: Model<ActivityDocument>,
   ) {}
 
   async create(createActivityDto: CreateActivityDto): Promise<Activity> {
     const activity = new this.activityModel({
       ...createActivityDto,
-      account:createActivityDto.account,
-      userId: createActivityDto.user
-        ? createActivityDto.user
-        : undefined,
+      account: createActivityDto.account,
+      userId: createActivityDto.user ? createActivityDto.user : undefined,
       entityId: createActivityDto.entityId
         ? createActivityDto.entityId
         : undefined,
@@ -48,7 +46,7 @@ export class ActivityService {
       priority?: ActivityPriority;
       isRead?: boolean;
       userId?: string;
-    }
+    },
   ): Promise<Activity[]> {
     const query: any = { accountId: new Types.ObjectId(accountId) };
 
@@ -75,13 +73,13 @@ export class ActivityService {
         readAt: new Date(),
         readBy: new Types.ObjectId(userId),
       },
-      { new: true }
+      { new: true },
     );
   }
 
   async markMultipleAsRead(
     activityIds: string[],
-    userId: string
+    userId: string,
   ): Promise<void> {
     await this.activityModel.updateMany(
       { _id: { $in: activityIds.map((id) => new Types.ObjectId(id)) } },
@@ -89,7 +87,7 @@ export class ActivityService {
         isRead: true,
         readAt: new Date(),
         readBy: new Types.ObjectId(userId),
-      }
+      },
     );
   }
 
@@ -111,16 +109,18 @@ export class ActivityService {
 
   async getRecentActivities(
     accountId: string,
-    limit: number = 10
+    limit: number = 10,
   ): Promise<{ text: string; time: string }[]> {
     const activities = await this.activityModel
       .find({ accountId: new Types.ObjectId(accountId) })
       .sort({ createdAt: -1 })
-      .limit(limit)
-        .select("title description createdAt type metadata user")
-        .populate("user", "firstName lastName email")
+      // .limit(limit)
+      .select("title description createdAt type metadata user")
+      .populate("user", "firstName lastName email")
       .lean()
       .exec();
+
+    console.log("Fetched Activities:", activities);
 
     return activities.map((activity) => ({
       text: this.formatActivityText(activity),
@@ -129,28 +129,34 @@ export class ActivityService {
   }
 
   private formatActivityText(activity: any): string {
-    const { title, description, metadata, user } = activity;
+    const { title, description, type, user } = activity;
 
     // Use metadata for richer formatting if available
-    if (metadata?.customerName) {
-      return `${title} by ${user ? user.firstName + ' ' + user.lastName : 'System'} for ${metadata.customerName}`;
+    // if (metadata?.customerName) {
+    //   return `${title} by ${user ? user.firstName + " " + user.lastName : "System"} for ${metadata.customerName}`;
+    // }
+
+    // if (metadata?.productName) {
+    //   return `${title}: ${metadata.productName}`;
+    // }
+
+    // if (metadata?.amount) {
+    //   return `${title} - $${metadata.amount.toLocaleString()}`;
+    // }
+    console.log(type, ActivityType.USER_LOGIN, user);
+    if (type === ActivityType.USER_LOGIN) {
+      return `${user ? user.firstName + " " + user.lastName : "A user"} logged in`;
     }
 
-    if (metadata?.productName) {
-      return `${title}: ${metadata.productName}`;
-    }
+    return title;
 
-    if (metadata?.amount) {
-      return `${title} - $${metadata.amount.toLocaleString()}`;
-    }
-
-    return title || description;
+    // return title || description;
   }
 
   private getRelativeTime(date: Date): string {
     const now = new Date();
     const diffInMinutes = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60)
+      (now.getTime() - date.getTime()) / (1000 * 60),
     );
     const diffInHours = Math.floor(diffInMinutes / 60);
     const diffInDays = Math.floor(diffInHours / 24);
@@ -176,7 +182,7 @@ export class ActivityService {
     invoiceId: ObjectId,
     account: ObjectId,
     user?: ObjectId,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ): Promise<Activity> {
     const titles = {
       [ActivityType.INVOICE_CREATED]: "Invoice created",
@@ -206,7 +212,7 @@ export class ActivityService {
     quotationId: ObjectId,
     account: ObjectId,
     user?: ObjectId,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ): Promise<Activity> {
     const titles = {
       [ActivityType.QUOTATION_CREATED]: "Quotation created",
@@ -219,7 +225,7 @@ export class ActivityService {
     return this.create({
       type,
       title: titles[type] || "Quotation activity",
-      description: `Quotation ${metadata?.quotationNumber || quotationId} ${type.replace("quotation_", "")}`,
+      description: `Quotation ${metadata?.uniqueId || quotationId} ${type.replace("quotation_", "")}`,
       account,
       user,
       entityId: quotationId,
@@ -234,7 +240,7 @@ export class ActivityService {
     productId: ObjectId,
     account: ObjectId,
     user?: ObjectId,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
   ): Promise<Activity> {
     const titles = {
       [ActivityType.PRODUCT_CREATED]: "Product added",

@@ -5,7 +5,7 @@ import { QuotationStatus } from "@/common/types";
 export type QuotationDocument = Quotation & Document;
 @Schema({ timestamps: true })
 export class QuotationItem {
-  @Prop({ type: Types.ObjectId, ref: 'Product' })
+  @Prop({ type: Types.ObjectId, ref: "Product" })
   product?: Types.ObjectId;
 
   @Prop({ required: true })
@@ -37,15 +37,30 @@ export class QuotationItem {
   lineTotal: number; // after discount + VAT
 
   @Prop()
-  profit: number;
+  whtAmount: number; // WHT amount per line
+
+  @Prop()
+  netReceivable: number; // lineTotal - whtAmount
+
+  @Prop()
+  grossProfit: number; // profit before WHT
+
+  @Prop()
+  netProfit: number; // profit after WHT
+
+  @Prop()
+  profit: number; // Legacy field (equals netProfit)
 }
 
 @Schema({ timestamps: true })
 export class Quotation extends Document {
-  @Prop({ unique: true })
-  quotationNumber: string;
+  @Prop({ type: Types.ObjectId, ref: "Account", required: true })
+  account: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Customer', required: true })
+  @Prop({ unique: true })
+  uniqueId: string;
+
+  @Prop({ type: Types.ObjectId, ref: "Customer", required: true })
   customer: Types.ObjectId;
 
   @Prop({ type: [QuotationItem] })
@@ -54,9 +69,18 @@ export class Quotation extends Document {
   @Prop() subtotal: number;
   @Prop() totalDiscount: number;
   @Prop() totalVat: number;
+  @Prop() totalWht: number; // Total WHT amount
   @Prop() grandTotal: number;
+  @Prop() netReceivable: number; // grandTotal - totalWht
+  @Prop() totalCost: number;
+  @Prop() expectedGrossProfit: number; // Profit before WHT
+  @Prop() expectedNetProfit: number; // Profit after WHT
+  @Prop() expectedGrossProfitMargin: number;
+  @Prop() expectedNetProfitMargin: number;
+  // Legacy fields for backwards compatibility
   @Prop() expectedProfit: number;
   @Prop() expectedProfitMargin: number;
+
   @Prop()
   template?: string;
 
@@ -72,10 +96,19 @@ export class Quotation extends Document {
   @Prop() validUntil?: Date;
 
   @Prop() convertedToInvoice?: boolean;
-  
-  
+
   @Prop() notes?: string;
   @Prop() terms?: string;
+
+  @Prop()
+  issuedDate: Date;
+
+  @Prop({ default: 0 }) whtRate: number; // Withholding tax rate
+  @Prop({ default: 0 }) vatRate: number; // VAT rate
+
+  // Additional fields for tracking who created the quotation
+  @Prop({ type: Types.ObjectId, ref: "User", required: true })
+  createdBy: Types.ObjectId;
 }
 
 export const QuotationSchema = SchemaFactory.createForClass(Quotation);

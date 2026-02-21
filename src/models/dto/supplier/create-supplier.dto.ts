@@ -5,8 +5,52 @@ import {
   IsOptional,
   IsBoolean,
   MaxLength,
+  IsArray,
+  ValidateNested,
 } from "class-validator";
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+
+export class ContactPersonDto {
+  @ApiProperty({ description: "Contact full name", example: "Jane Doe" })
+  @IsString()
+  @MaxLength(128)
+  name!: string;
+
+  @ApiPropertyOptional({
+    description: "Contact email",
+    example: "jane@example.com",
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({
+    description: "Contact phone number",
+    example: "+14155552671",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  phone?: string;
+
+  @ApiPropertyOptional({
+    description: "Role or title of the contact person",
+    example: "Purchasing Manager",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  role?: string;
+
+  @ApiPropertyOptional({
+    description: "Whether this contact is the primary contact",
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  primary?: boolean;
+}
 
 export class CreateSupplierDto {
   @ApiProperty({
@@ -18,10 +62,10 @@ export class CreateSupplierDto {
   @MaxLength(100)
   name: string;
 
-  @ApiProperty({
-    description: "Contact person name",
+  @ApiPropertyOptional({
+    description:
+      "Primary contact person name (legacy field, use contacts array instead)",
     example: "John Smith",
-    required: false,
     maxLength: 50,
   })
   @IsOptional()
@@ -29,28 +73,35 @@ export class CreateSupplierDto {
   @MaxLength(50)
   contact?: string;
 
-  @ApiProperty({
-    description: "Email address",
+  @ApiPropertyOptional({
+    description: "Array of contact persons",
+    type: [ContactPersonDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ContactPersonDto)
+  contacts?: ContactPersonDto[];
+
+  @ApiPropertyOptional({
+    description: "Primary email address",
     example: "contact@techsolutions.com",
-    required: false,
   })
   @IsOptional()
   @IsEmail()
   email?: string;
 
-  @ApiProperty({
-    description: "Phone number",
+  @ApiPropertyOptional({
+    description: "Primary phone number",
     example: "+1234567890",
-    required: false,
   })
   @IsOptional()
   @IsString()
   phone?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "Physical address",
     example: "123 Business Street, City, State",
-    required: false,
     maxLength: 200,
   })
   @IsOptional()
@@ -58,11 +109,10 @@ export class CreateSupplierDto {
   @MaxLength(200)
   address?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "Payment terms",
     example: "Net 30",
     default: "Net 30",
-    required: false,
     maxLength: 50,
   })
   @IsOptional()
@@ -70,10 +120,9 @@ export class CreateSupplierDto {
   @MaxLength(50)
   paymentTerms?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "Tax identification number",
     example: "TAX123456789",
-    required: false,
     maxLength: 50,
   })
   @IsOptional()
@@ -81,11 +130,10 @@ export class CreateSupplierDto {
   @MaxLength(50)
   taxId?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "Whether the supplier is active",
     example: true,
     default: true,
-    required: false,
   })
   @IsOptional()
   @IsBoolean()

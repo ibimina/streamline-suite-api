@@ -35,7 +35,7 @@ export class AccountService {
 
       // Year to date range (January 1st to current date)
       const startOfYear = new Date(currentYear, 0, 1); // January 1st of current year
-
+console.log(startOfYear);
       // Parallel execution of all aggregations for better performance
       const [
         salesData,

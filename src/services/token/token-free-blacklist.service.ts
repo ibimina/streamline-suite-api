@@ -10,7 +10,6 @@ export class TokenFreeBlacklistService {
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private jwtService: JwtService
   ) {}
 
   /**

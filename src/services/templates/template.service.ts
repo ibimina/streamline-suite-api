@@ -1,16 +1,18 @@
 import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
 import { Model } from "mongoose";
-import { TemplateDocument } from "@/schemas/template.schema";
+import { Template, TemplateDocument } from "@/schemas/template.schema";
 import { randomUUID } from "crypto";
-import { AccountDocument } from "@/schemas/account.schema";
-import { NotFoundException } from "@nestjs/common";
+import { Account, AccountDocument } from "@/schemas/account.schema";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectModel } from "@nestjs/mongoose";
 
+@Injectable()
 export class TemplateService {
   constructor(
     private readonly cloudinaryService: CloudinaryService,
-    private readonly templateModel: Model<TemplateDocument>,
-    private readonly accountModel: Model<AccountDocument>
+    @InjectModel(Template.name) private readonly templateModel: Model<TemplateDocument>,
+    @InjectModel(Account.name) private readonly accountModel: Model<AccountDocument>
   ) {}
   async uploadTemplate(uploadFileDto: UploadFileDto, companyId: string) {
     try {

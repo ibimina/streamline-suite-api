@@ -6,13 +6,13 @@ A comprehensive NestJS backend API for Streamline Suite business management syst
 
 - **Authentication & Authorization**: JWT-based authentication with role-based access control
 - **User Management**: Complete user profile and permission management
-- **Company Management**: Multi-tenant company settings with logo and custom template uploads
+- **Account Management**: Multi-tenant account settings with logo and custom template uploads
 - **Invoice Management**: Invoice data management (PDF generation handled by frontend)
 - **Quotation System**: Quote creation and management (PDF generation handled by frontend)
 - **Inventory Management**: Product and service catalog with stock tracking
 - **Expense Tracking**: Comprehensive expense management with categories
 - **Staff Management**: Employee management with role-based permissions
-- **File Upload System**: Secure image upload for company logos and custom PDF templates
+- **File Upload System**: Secure image upload for account logos and custom PDF templates
 - **Analytics & Reporting**: Business insights and reporting dashboards
 - **API Documentation**: Auto-generated Swagger/OpenAPI documentation
 
@@ -89,7 +89,7 @@ src/
 ├── modules/               # Feature modules
 │   ├── auth/             # Authentication & authorization
 │   ├── users/            # User management
-│   ├── companies/        # Company management
+│   ├── companies/        # Account management
 │   ├── invoices/         # Invoice operations
 │   ├── quotations/       # Quotation management
 │   ├── inventory/        # Product/service catalog
@@ -138,7 +138,7 @@ Authorization: Bearer <your-jwt-token>
 ## 👥 User Roles
 
 - **Admin**: Full system access
-- **Manager**: Company management and staff oversight
+- **Manager**: Account management and staff oversight
 - **Staff**: Limited access to assigned features
 
 ## 🌐 API Endpoints
@@ -155,10 +155,10 @@ Authorization: Bearer <your-jwt-token>
 - \`PUT /api/v1/users/profile\` - Update profile
 
 ### Companies
-- `GET /api/v1/companies/:id` - Get company details
-- `PUT /api/v1/companies/:id` - Update company
-- `POST /api/v1/companies/:id/logo` - Upload company logo
-- `DELETE /api/v1/companies/:id/logo` - Delete company logo
+- `GET /api/v1/companies/:id` - Get account details
+- `PUT /api/v1/companies/:id` - Update account
+- `POST /api/v1/companies/:id/logo` - Upload account logo
+- `DELETE /api/v1/companies/:id/logo` - Delete account logo
 - `POST /api/v1/companies/:id/templates` - Upload custom PDF template
 - `GET /api/v1/companies/:id/templates` - Get custom templates
 - `PUT /api/v1/companies/:id/templates/:templateId` - Update template

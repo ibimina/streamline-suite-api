@@ -35,7 +35,7 @@ export class CustomerService {
   ): Promise<CustomerDocument> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
-      throw new NotFoundException("Customer not found.");
+      throw new NotFoundException("Account not found.");
     }
     const { email } = createDto as any;
 
@@ -63,7 +63,7 @@ export class CustomerService {
     options: PaginationOptions = {},
     companyId: string
   ): Promise<{
-    items: CustomerDocument[];
+    customers: CustomerDocument[];
     total: number;
     page: number;
     limit: number;
@@ -78,12 +78,12 @@ export class CustomerService {
     const skip = (page - 1) * limit;
     const sort = options.sort || "-createdAt";
 
-    const [items, total] = await Promise.all([
+    const [customers, total] = await Promise.all([
       this.customerModel.find(filter).sort(sort).skip(skip).limit(limit).exec(),
       this.customerModel.countDocuments(filter).exec(),
     ]);
 
-    return { items, total, page, limit };
+    return { customers, total, page, limit };
   }
 
   async getCustomerById(

@@ -15,6 +15,26 @@ import {
   IsMongoId,
 } from "class-validator";
 
+/**
+ * Customer Creation Data Transfer Object
+ *
+ * REQUIRED FIELDS (marked with @ApiProperty):
+ * - fullName: Customer display name (1-256 characters)
+ * - name (in ContactPersonDto): Contact person name (1-128 characters)
+ * - name (in BranchDto): Branch name (1-256 characters)
+ *
+ * ALL OTHER FIELDS ARE OPTIONAL (marked with @ApiPropertyOptional):
+ * - Basic Info: companyName, email, phone, address
+ * - Addresses: billingAddress, shippingAddress (structured format)
+ * - Relationships: contacts[], branches[]
+ * - Metadata: tags[], customFields{}, currency, language, status, notes
+ *
+ * Default Values:
+ * - status: 'active' if not specified
+ * - isActive (branches): true if not specified
+ * - primary (contacts): false if not specified
+ */
+
 export class AddressDto {
   @ApiPropertyOptional({
     description: "Street address",
@@ -91,6 +111,74 @@ export class ContactPersonDto {
   primary?: boolean;
 }
 
+export class BranchDto {
+  @ApiProperty({
+    description: "Branch name or identifier",
+    example: "Downtown Branch",
+  })
+  @IsString()
+  @Length(1, 256)
+  name!: string;
+
+  @ApiPropertyOptional({
+    description: "Branch code or identifier",
+    example: "DTN001",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  code?: string;
+
+  @ApiPropertyOptional({ type: AddressDto, description: "Branch address" })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address?: AddressDto;
+
+  @ApiPropertyOptional({
+    description: "Branch contact person",
+    example: "John Smith",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 128)
+  contactPerson?: string;
+
+  @ApiPropertyOptional({
+    description: "Branch contact email",
+    example: "downtown@acme.com",
+  })
+  @IsOptional()
+  @IsEmail()
+  contactEmail?: string;
+
+  @ApiPropertyOptional({
+    description: "Branch contact phone",
+    example: "+14155552672",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(1, 64)
+  contactPhone?: string;
+
+  @ApiPropertyOptional({
+    description: "Branch-specific notes",
+    example: "Main procurement office",
+  })
+  @IsOptional()
+  @IsString()
+  @Length(0, 1000)
+  notes?: string;
+
+  @ApiPropertyOptional({
+    description: "Whether this branch is active",
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
 export class CreateCustomerDto {
   @ApiProperty({
     description: "Customer display name or full name",
@@ -126,10 +214,13 @@ export class CreateCustomerDto {
   @Length(1, 64)
   phone?: string;
 
-
-    @IsOptional()
+  @ApiPropertyOptional({
+    description: "Primary/default address (simple format)",
+    example: "123 Main St, San Francisco, CA 94105",
+  })
+  @IsOptional()
   @IsString()
-  @Length(1, 64)
+  @Length(1, 256)
   address?: string;
 
   @ApiPropertyOptional({ type: AddressDto, description: "Billing address" })
@@ -153,6 +244,16 @@ export class CreateCustomerDto {
   @ValidateNested({ each: true })
   @Type(() => ContactPersonDto)
   contacts?: ContactPersonDto[];
+
+  @ApiPropertyOptional({
+    description: "Array of customer branches/locations",
+    type: [BranchDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BranchDto)
+  branches?: BranchDto[];
 
   @ApiPropertyOptional({
     description: "Customer tags for filtering",
@@ -207,12 +308,4 @@ export class CreateCustomerDto {
   @IsString()
   @Length(0, 2000)
   notes?: string;
-
-  @ApiPropertyOptional({
-    description: "Id of the user who created this customer",
-    example: "60d0fe4f5311236168a109ca",
-  })
-  @IsOptional()
-  @IsMongoId()
-  createdBy?: string;
 }

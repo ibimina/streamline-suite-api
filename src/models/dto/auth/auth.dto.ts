@@ -8,10 +8,10 @@ export class CreateCompanyandUserDto {
   @Transform(({ value }) => value?.trim())
   name: string;
 
-  @ApiPropertyOptional({ description: "Account description" })
+  @ApiProperty({ description: "Account industry" })
   @IsString()
   @Transform(({ value }) => value?.trim())
-  description?: string;
+  industry: string;
 
   @ApiPropertyOptional({ description: "Account address" })
   @IsString()
@@ -42,6 +42,16 @@ export class CreateCompanyandUserDto {
   @IsString()
   @Transform(({ value }) => value?.trim())
   country: string;
+
+  @ApiProperty({ description: "Phone number with country code" })
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  phoneNumber: string;
+
+  @ApiProperty({ description: "Company size" })
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  companySize: string;
 }
 
 export class LoginDto {

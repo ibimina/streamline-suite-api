@@ -101,6 +101,18 @@ export class Account {
 
   @Prop({ type: [Types.ObjectId], ref: "Template" })
   templates: Types.ObjectId[];
+
+  @Prop({ trim: true })
+  companySize?: string;
+
+  @Prop({ trim: true })
+  phoneNumber?: string;
+
+  @Prop({ trim: true })
+  description?: string;
+  
+  @Prop({ trim: true })
+  tagline?: string;
 }
 
 export const AccountSchema = SchemaFactory.createForClass(Account);

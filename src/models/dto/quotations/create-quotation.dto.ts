@@ -20,10 +20,6 @@ export class ItemDto {
   @IsString()
   product?: string; // Product ObjectId reference
 
-  @IsOptional()
-  @IsString()
-  name?: string;
-
   @IsString()
   description: string;
 
@@ -89,4 +85,13 @@ export class CreateQuotationDto {
   @IsOptional()
   @IsString()
   accentColor?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  whtRate?: number; // Withholding tax rate
+
+  @IsDateString()
+  issuedDate: Date; // Required issued date
 }

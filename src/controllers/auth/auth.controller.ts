@@ -29,12 +29,28 @@ export class AuthController {
 
   @Post("createAccount")
   @ApiOperation({ summary: "Register a new account" })
-  @ApiResponse({ status: 201, description: "Account registered successfully" })
   @ApiResponse({ status: 409, description: "Account already exists" })
   async registerCompany(
     @Body() createCompanyandUserDto: CreateCompanyandUserDto
   ) {
-    return this.authService.registerCompany(createCompanyandUserDto);
+    try {
+      const account = await this.authService.registerCompany(
+        createCompanyandUserDto
+      );
+      if (account) {
+        return {
+          payload: account,
+          message: "Account registered successfully",
+          status: HttpStatus.CREATED,
+        };
+      }
+    } catch (error) {
+      console.error(
+        `Error occured in Auth Controller in - registerCompany`,
+        JSON.stringify(error)
+      );
+      throw error;
+    }
   }
 
   @Post("login")
@@ -43,16 +59,42 @@ export class AuthController {
   @ApiResponse({ status: 200, description: "Login successful" })
   @ApiResponse({ status: 401, description: "Invalid credentials" })
   async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+    try {
+      const result = await this.authService.login(loginDto);
+      return {
+        payload: result,
+        message: "Login successful",
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        `Error occured in Auth Controller in - login`,
+        JSON.stringify(error)
+      );
+      throw error;
+      }
   }
 
-  @Post("refresh")
+  @Post("refreshToken")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh access token" })
   @ApiResponse({ status: 200, description: "Token refreshed successfully" })
   @ApiResponse({ status: 401, description: "Invalid refresh token" })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshToken(refreshTokenDto.refreshToken);
+    try {
+      const result = await this.authService.refreshToken(refreshTokenDto.refreshToken);
+      return {
+        payload: result,
+        message: "Token refreshed successfully",
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        `Error occured in Auth Controller in - refresh`,
+        JSON.stringify(error)
+      );
+      throw error;
+    }
   }
 
   @Post("change-password")
@@ -65,11 +107,24 @@ export class AuthController {
     @GetUser("id") userId: string,
     @Body() changePasswordDto: ChangePasswordDto
   ) {
-    return this.authService.changePassword(
-      userId,
-      changePasswordDto.currentPassword,
-      changePasswordDto.newPassword
-    );
+    try {
+      const result = await this.authService.changePassword(
+        userId,
+        changePasswordDto.currentPassword,
+        changePasswordDto.newPassword
+      );
+      return {
+        payload: result,
+        message: "Password changed successfully",
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        `Error occured in Auth Controller in - changePassword`,
+        JSON.stringify(error)
+      );
+      throw error;
+    }
   }
 
   @Post("profile")
@@ -86,15 +141,15 @@ export class AuthController {
   @ApiOperation({
     summary: "User logout - Invalidates all user tokens (token-free)",
   })
-  @ApiBearerAuth("JWT-auth")
   @ApiResponse({
     status: 200,
     description: "Logout successful - all tokens invalidated",
   })
-  async logout(@Req() req: any, @GetUser() user: any) {
+  async logout(@Req() req: {user:{id: string}, headers: {authorization?: string}},) {
     // Extract token from Authorization header (not stored, just for signature)
+    console.log(req.headers, req.user)
     const token = req.headers.authorization?.replace("Bearer ", "");
-    return this.authService.logout(token, user.id);
+    return this.authService.logout(token, req.user.id);
   }
 
   @Post("logout-all")

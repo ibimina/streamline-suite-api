@@ -27,7 +27,6 @@ export class RolesGuard implements CanActivate {
     );
 
     const token = this.extractTokenFromHeader(request);
-    console.log("================= token", token)
     console.log('=====================requiredRoles', requiredRoles);
 
       if (!token || !requiredRoles) {

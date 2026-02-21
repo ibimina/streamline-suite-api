@@ -7,13 +7,13 @@ import { ThrottlerModule } from "@nestjs/throttler";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthController } from "./controllers/auth/auth.controller";
 import { EmailController } from "./controllers/email/email.controller";
-import { UserController } from "./controllers/user/user.controller";
 import { AuthService } from "./services/auth/auth.service";
 import { AccountService } from "./services/account/account.service";
 import { EmailService } from "./services/email/email.service";
 import { InvoicesService } from "./services/invoice/invoices.service";
 import { QuotationsService } from "./services/quotation/quotations.service";
 import { UserService } from "./services/user/user.service";
+import { StaffService } from "./services/staff/staff.service";
 import { UserSchema } from "./schemas/user.schema";
 import { AccountSchema } from "./schemas/account.schema";
 import { InvoiceSchema } from "./schemas/invoice.schema";
@@ -22,19 +22,22 @@ import { QuotationSchema } from "./schemas/quotation.schema";
 import { CustomerSchema } from "./schemas/customer.schema";
 import { CloudinaryService } from "./services/cloudinary/cloudinary.service";
 import { TemplateSchema } from "./schemas/template.schema";
-import { TemplateController } from "./controllers/templates/template.controller";
 import { TemplateService } from "./services/templates/template.service";
-import { ProductController } from "./controllers/products/product.controller";
 import { ProductService } from "./services/product/product.service";
 import { ProductSchema } from "./schemas/product.schema";
 import { InventoryTransactionSchema } from "./schemas/inventory-transaction.schema";
-import { SupplierController } from "./controllers/supplier/supplier.controller";
-import { InventoryTransactionController } from "./controllers/inventory-transaction/inventory-transaction.controller";
 import { SupplierService } from "./services/supplier/supplier.service";
 import { InventoryTransactionService } from "./services/inventory-transaction/inventory-transaction.service";
 import { SupplierSchema } from "./schemas/supplier.schema";
 import { ActivitySchema } from "./schemas/activity.schema";
+import { ExpenseSchema } from "./schemas/expense.schema";
+import { PayrollSchema } from "./schemas/payroll.schema";
+import { TaxReportSchema } from "./schemas/tax-report.schema";
 import { ActivityService } from "./services/activity/activity.service";
+import { ExpenseService } from "./services/expense/expense.service";
+import { PayrollService } from "./services/payroll/payroll.service";
+import { TaxService } from "./services/tax/tax.service";
+import { AnalyticsService } from "./services/analytics/analytics.service";
 import { CustomerPortalController } from "./controllers/customer-portal/customer-portal.controller";
 import { CustomerService } from "./services/customer/customer.service";
 
@@ -76,6 +79,9 @@ import { CustomerService } from "./services/customer/customer.service";
       { name: "InventoryTransaction", schema: InventoryTransactionSchema },
       { name: "Supplier", schema: SupplierSchema },
       { name: "Activity", schema: ActivitySchema },
+      { name: "Expense", schema: ExpenseSchema },
+      { name: "Payroll", schema: PayrollSchema },
+      { name: "TaxReport", schema: TaxReportSchema },
     ]),
     // Rate limiting
     ThrottlerModule.forRoot({
@@ -86,11 +92,6 @@ import { CustomerService } from "./services/customer/customer.service";
   controllers: [
     AuthController,
     EmailController,
-    UserController,
-    TemplateController,
-    ProductController,
-    InventoryTransactionController,
-    SupplierController,
     CustomerPortalController,
   ],
   providers: [
@@ -100,6 +101,7 @@ import { CustomerService } from "./services/customer/customer.service";
     InvoicesService,
     QuotationsService,
     UserService,
+    StaffService,
     TokenFreeBlacklistService,
     CloudinaryService,
     TemplateService,
@@ -108,6 +110,10 @@ import { CustomerService } from "./services/customer/customer.service";
     SupplierService,
     ActivityService,
     CustomerService,
+    ExpenseService,
+    PayrollService,
+    TaxService,
+    AnalyticsService,
   ],
 })
 export class AppModule {}

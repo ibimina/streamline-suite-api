@@ -18,7 +18,7 @@ export class SupplierService {
     @InjectModel(Account.name) private companyModel: Model<AccountDocument>
   ) {}
 
-  async create(
+  async createSupplier(
     createSupplierDto: CreateSupplierDto,
     companyId: string,
     userId: string
@@ -59,10 +59,13 @@ export class SupplierService {
     return supplier.save();
   }
 
-  async findAll(
+  async findAllSuppliers(
     companyId: string,
     query: PaginationQuery
-  ): Promise<PaginatedResponse<Supplier>> {
+  ): Promise<{
+    suppliers: Supplier[]
+    total: number
+  }> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -101,12 +104,12 @@ export class SupplierService {
     ]);
 
     return {
-      data: suppliers,
+       suppliers,
       total,
     };
   }
 
-  async findOne(id: string, companyId: string): Promise<Supplier> {
+  async findSupplierById(id: string, companyId: string): Promise<Supplier> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -124,7 +127,7 @@ export class SupplierService {
     return supplier;
   }
 
-  async update(
+  async updateSupplier(
     id: string,
     updateSupplierDto: UpdateSupplierDto,
     companyId: string
@@ -176,7 +179,7 @@ export class SupplierService {
     return supplier;
   }
 
-  async remove(id: string, companyId: string): Promise<void> {
+  async removeSupplier(id: string, companyId: string): Promise<void> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");

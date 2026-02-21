@@ -1,4 +1,4 @@
-import { PartialType } from "@nestjs/mapped-types";
+import { PartialType } from "@nestjs/swagger";
 import { CreateInvoiceDto } from "./create-invoice.dto";
 import { IsOptional, IsEnum, IsString } from "class-validator";
 import { InvoiceStatus } from "@/common/types";

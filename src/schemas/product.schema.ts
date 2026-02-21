@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
+import { Document, Types } from "mongoose";
 
 export type ProductDocument = Product & Document;
 
@@ -80,8 +80,14 @@ export class Product {
   @Prop()
   createdBy: string;
 
-  @Prop({type: String, enum: ["stock_out", "stock_in", "discontinued"], default: "active"})
+  @Prop({type: String, enum: ["stock_in", "stock_out", "discontinued"], default: "stock_in"})
   status: string;
+
+@Prop({ type: Types.ObjectId, ref: "Supplier" })
+  supplier: Types.ObjectId;  
+
+  @Prop({ type: [Types.ObjectId], ref: "Supplier" })
+  alternativeSuppliers: Types.ObjectId[];
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

@@ -16,12 +16,12 @@ export class AnalyticsService {
     @InjectModel(Quotation.name)
     private quotationModel: Model<QuotationDocument>,
     @InjectModel(Customer.name)
-    private customerModel: Model<CustomerDocument>
+    private customerModel: Model<CustomerDocument>,
   ) {}
 
   async getAnalytics(
     accountId: string,
-    query?: { startDate?: string; endDate?: string; period?: string }
+    query?: { startDate?: string; endDate?: string; period?: string },
   ): Promise<any> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -41,9 +41,9 @@ export class AnalyticsService {
     const currentMonthStats = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: account._id,
           createdAt: { $gte: startOfMonth, $lte: endOfMonth },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {
@@ -60,9 +60,9 @@ export class AnalyticsService {
     const prevMonthStats = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: accountObjectId,
           createdAt: { $gte: startOfPrevMonth, $lte: endOfPrevMonth },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {
@@ -110,9 +110,9 @@ export class AnalyticsService {
     const revenueProfitTrend = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: accountObjectId,
           createdAt: { $gte: twelveMonthsAgo },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {
@@ -132,9 +132,9 @@ export class AnalyticsService {
     const salesByService = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: accountObjectId,
           createdAt: { $gte: twelveMonthsAgo },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       { $unwind: "$items" },
@@ -152,9 +152,9 @@ export class AnalyticsService {
     const topCustomers = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: accountObjectId,
           createdAt: { $gte: twelveMonthsAgo },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {
@@ -165,22 +165,18 @@ export class AnalyticsService {
       },
       { $sort: { value: -1 } },
       { $limit: 10 },
-      {
-        $lookup: {
-          from: "customers",
-          localField: "_id",
-          foreignField: "_id",
-          as: "customerInfo",
-        },
-      },
-      { $unwind: { path: "$customerInfo", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          name: { $ifNull: ["$customerInfo.name", "Unknown Customer"] },
-          value: 1,
-        },
-      },
     ]);
+
+    // Populate customer names using Mongoose
+    const topCustomerIds = topCustomers.map((c) => c._id);
+    const topCustomerDocs = await this.customerModel
+      .find({ _id: { $in: topCustomerIds } })
+      .select("companyName fullName")
+      .lean()
+      .exec();
+    const topCustomerMap = new Map(
+      topCustomerDocs.map((c) => [c._id.toString(), c]),
+    );
 
     return {
       kpis: {
@@ -201,10 +197,13 @@ export class AnalyticsService {
         name: item._id || "Other",
         sales: item.sales || 0,
       })),
-      topCustomers: topCustomers.map((item) => ({
-        name: item.name,
-        value: item.value || 0,
-      })),
+      topCustomers: topCustomers.map((item) => {
+        const cust = topCustomerMap.get(item._id.toString());
+        return {
+          name: cust?.companyName || cust?.fullName || "Unknown Customer",
+          value: item.value || 0,
+        };
+      }),
     };
   }
 
@@ -220,9 +219,9 @@ export class AnalyticsService {
     const breakdown = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: account._id,
+          account: account._id,
           createdAt: { $gte: twelveMonthsAgo },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       { $unwind: "$items" },
@@ -253,12 +252,12 @@ export class AnalyticsService {
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
-    const customers = await this.invoiceModel.aggregate([
+    const customerAgg = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: account._id,
+          account: account._id,
           createdAt: { $gte: twelveMonthsAgo },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {
@@ -269,29 +268,31 @@ export class AnalyticsService {
       },
       { $sort: { revenue: -1 } },
       { $limit: limit },
-      {
-        $lookup: {
-          from: "customers",
-          localField: "_id",
-          foreignField: "_id",
-          as: "customerInfo",
-        },
-      },
-      { $unwind: { path: "$customerInfo", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          name: { $ifNull: ["$customerInfo.name", "Unknown Customer"] },
-          revenue: 1,
-        },
-      },
     ]);
 
-    return { customers };
+    // Populate customer names using Mongoose
+    const custIds = customerAgg.map((c) => c._id);
+    const custDocs = await this.customerModel
+      .find({ _id: { $in: custIds } })
+      .select("companyName fullName")
+      .lean()
+      .exec();
+    const custMap = new Map(custDocs.map((c) => [c._id.toString(), c]));
+
+    return {
+      customers: customerAgg.map((item) => {
+        const cust = custMap.get(item._id.toString());
+        return {
+          name: cust?.companyName || cust?.fullName || "Unknown Customer",
+          revenue: item.revenue,
+        };
+      }),
+    };
   }
 
   async getSalesTrend(
     accountId: string,
-    period: "daily" | "weekly" | "monthly" | "yearly" = "monthly"
+    period: "daily" | "weekly" | "monthly" | "yearly" = "monthly",
   ): Promise<any> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -332,9 +333,9 @@ export class AnalyticsService {
     const trend = await this.invoiceModel.aggregate([
       {
         $match: {
-          accountId: account._id,
+          account: account._id,
           createdAt: { $gte: lookbackDate },
-          status: { $in: ["paid", "sent"] },
+          status: { $in: ["Paid", "Sent"] },
         },
       },
       {

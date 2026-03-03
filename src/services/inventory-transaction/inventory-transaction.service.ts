@@ -25,13 +25,37 @@ export class InventoryTransactionService {
     @InjectModel(InventoryTransaction.name)
     private inventoryTransactionModel: Model<InventoryTransactionDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
-    @InjectModel(Account.name) private companyModel: Model<AccountDocument>
+    @InjectModel(Account.name) private companyModel: Model<AccountDocument>,
   ) {}
+
+  /**
+   * Determine if a transaction status represents an inbound (stock increase) movement
+   */
+  private isInboundStatus(status: string): boolean {
+    const inbound = [
+      InventoryTransactionStatus.PURCHASE,
+      InventoryTransactionStatus.RETURN_FROM_CUSTOMER,
+      InventoryTransactionStatus.PRODUCTION_IN,
+    ];
+    return inbound.includes(status as InventoryTransactionStatus);
+  }
+
+  /**
+   * Determine if a transaction status represents an outbound (stock decrease) movement
+   */
+  private isOutboundStatus(status: string): boolean {
+    const outbound = [
+      InventoryTransactionStatus.SALE,
+      InventoryTransactionStatus.RETURN_TO_SUPPLIER,
+      InventoryTransactionStatus.PRODUCTION_OUT,
+    ];
+    return outbound.includes(status as InventoryTransactionStatus);
+  }
 
   async createInventoryTransaction(
     createInventoryTransactionDto: CreateInventoryTransactionDto,
     companyId: string,
-    userId: string
+    userId: string,
   ): Promise<InventoryTransaction> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
@@ -42,7 +66,7 @@ export class InventoryTransactionService {
     const product = await this.productModel
       .findOne({
         _id: createInventoryTransactionDto.product,
-        companyId: account._id,
+        account: account._id,
       })
       .exec();
 
@@ -53,7 +77,7 @@ export class InventoryTransactionService {
     // Generate transaction reference if not provided
     if (!createInventoryTransactionDto.reference) {
       const lastTransaction = await this.inventoryTransactionModel
-        .findOne({ companyId: account._id })
+        .findOne({ account: account._id })
         .sort({ createdAt: -1 })
         .exec();
 
@@ -72,35 +96,34 @@ export class InventoryTransactionService {
     // Check for duplicate reference within account
     const existingTransaction = await this.inventoryTransactionModel.findOne({
       reference: createInventoryTransactionDto.reference,
-      companyId: account._id,
+      account: account._id,
     });
     if (existingTransaction) {
       throw new BadRequestException("Reference already exists in your account");
     }
 
-    // Check if product tracks inventory for stock operations
-    if (
-      ["stock_in", "stock_out", "adjustment"].includes(product.status) &&
-      !product.trackInventory
-    ) {
+    // Check if product tracks inventory
+    if (!product.trackInventory) {
       throw new BadRequestException(
-        "Cannot create stock transaction for product that doesn't track inventory"
+        "Cannot create stock transaction for product that doesn't track inventory",
       );
     }
 
-    // Check sufficient stock for out transactions
+    const txStatus = createInventoryTransactionDto.status;
+
+    // Check sufficient stock for outbound transactions
     if (
-      product.status === "stock_out" &&
+      this.isOutboundStatus(txStatus) &&
       product.currentStock < createInventoryTransactionDto.quantity
     ) {
       throw new BadRequestException(
-        `Insufficient stock. Available: ${product.currentStock}, Required: ${createInventoryTransactionDto.quantity}`
+        `Insufficient stock. Available: ${product.currentStock}, Required: ${createInventoryTransactionDto.quantity}`,
       );
     }
 
-    // Calculate unit cost if not provided (for stock_in transactions)
+    // Calculate unit cost if not provided (for inbound transactions)
     if (
-      product.status === "stock_in" &&
+      this.isInboundStatus(txStatus) &&
       !createInventoryTransactionDto.unitCost
     ) {
       createInventoryTransactionDto.unitCost = product.costPrice || 0;
@@ -108,16 +131,245 @@ export class InventoryTransactionService {
 
     const transaction = new this.inventoryTransactionModel({
       ...createInventoryTransactionDto,
-      companyId,
+      account: account._id,
       createdBy: userId,
-      status:
-        InventoryTransactionStatus[
-          createInventoryTransactionDto.status.toUpperCase()
-        ],
     });
 
     const savedTransaction = await transaction.save();
     return savedTransaction;
+  }
+
+  /**
+   * Create inventory transactions for invoice items (called by InvoicesService).
+   * Only creates transactions for items that reference a product with trackInventory: true.
+   */
+  async createSaleTransactionsForInvoice(
+    invoiceItems: Array<{
+      product?: any;
+      description: string;
+      quantity: number;
+      unitCost?: number;
+    }>,
+    invoiceRef: string,
+    invoiceId: string,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const account = await this.companyModel.findById(accountId).exec();
+    if (!account) return;
+
+    for (const item of invoiceItems) {
+      if (!item.product) continue; // Skip free-text items with no product link
+
+      const productId =
+        typeof item.product === "object"
+          ? item.product._id || item.product
+          : item.product;
+
+      const product = await this.productModel
+        .findOne({ _id: productId, account: account._id })
+        .exec();
+
+      if (!product || !product.trackInventory) continue;
+
+      const transaction = new this.inventoryTransactionModel({
+        product: product._id,
+        status: InventoryTransactionStatus.SALE,
+        quantity: item.quantity,
+        unitCost: item.unitCost || product.costPrice || 0,
+        reference: `Invoice ${invoiceRef}`,
+        referenceId: invoiceId,
+        account: account._id,
+        createdBy: userId,
+        notes: `Auto-created from invoice ${invoiceRef}`,
+      });
+
+      await transaction.save(); // post-save hook updates product.currentStock
+    }
+  }
+
+  /**
+   * Reverse inventory transactions for a cancelled/deleted invoice.
+   * Creates return_from_customer transactions to restore stock.
+   */
+  async reverseInvoiceTransactions(
+    invoiceId: string,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const account = await this.companyModel.findById(accountId).exec();
+    if (!account) return;
+
+    // Find all sale transactions linked to this invoice
+    const saleTransactions = await this.inventoryTransactionModel
+      .find({
+        referenceId: invoiceId,
+        account: account._id,
+        status: InventoryTransactionStatus.SALE,
+      })
+      .exec();
+
+    for (const saleTx of saleTransactions) {
+      // Create a return transaction to reverse each sale
+      const reversal = new this.inventoryTransactionModel({
+        product: saleTx.product,
+        status: InventoryTransactionStatus.RETURN_FROM_CUSTOMER,
+        quantity: saleTx.quantity,
+        unitCost: saleTx.unitCost,
+        reference: `Reversal of ${saleTx.reference}`,
+        referenceId: invoiceId,
+        account: account._id,
+        createdBy: userId,
+        notes: `Auto-reversal: invoice cancelled/deleted`,
+      });
+
+      await reversal.save(); // post-save hook recalculates stock
+    }
+  }
+
+  /**
+   * Create an initial stock (PURCHASE) transaction when a new product is created
+   * with trackInventory enabled and currentStock > 0.
+   */
+  async createInitialStockTransaction(
+    productId: string,
+    quantity: number,
+    unitCost: number,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const transaction = new this.inventoryTransactionModel({
+      product: new Types.ObjectId(productId),
+      status: InventoryTransactionStatus.PURCHASE,
+      quantity,
+      unitCost,
+      reference: "Initial stock",
+      account: new Types.ObjectId(accountId),
+      createdBy: new Types.ObjectId(userId),
+      notes: "Auto-created: initial stock on product creation",
+    });
+
+    await transaction.save(); // post-save hook updates product.currentStock
+  }
+
+  /**
+   * Create a stock adjustment transaction when a product's currentStock is
+   * manually changed via product update.
+   * Positive stockDiff → PURCHASE (inbound), negative → SALE (outbound).
+   * We use PURCHASE/SALE rather than ADJUSTMENT so the post-save hook's
+   * isPositive regex handles directionality correctly.
+   */
+  async createStockAdjustmentTransaction(
+    productId: string,
+    stockDiff: number,
+    unitCost: number,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const status =
+      stockDiff > 0
+        ? InventoryTransactionStatus.PURCHASE
+        : InventoryTransactionStatus.SALE;
+
+    const transaction = new this.inventoryTransactionModel({
+      product: new Types.ObjectId(productId),
+      status,
+      quantity: Math.abs(stockDiff),
+      unitCost,
+      reference: `Stock adjustment (${stockDiff > 0 ? "+" : ""}${stockDiff})`,
+      account: new Types.ObjectId(accountId),
+      createdBy: new Types.ObjectId(userId),
+      notes: `Auto-created: manual stock adjustment via product update`,
+    });
+
+    await transaction.save(); // post-save hook recalculates product.currentStock
+  }
+
+  /**
+   * Create PURCHASE inventory transactions for expense items (called by ExpenseService).
+   * Only creates transactions for items that reference a product with trackInventory: true.
+   */
+  async createPurchaseTransactionsForExpense(
+    expenseItems: Array<{
+      product?: any;
+      description: string;
+      quantity: number;
+      unitCost?: number;
+    }>,
+    expenseRef: string,
+    expenseId: string,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const account = await this.companyModel.findById(accountId).exec();
+    if (!account) return;
+
+    for (const item of expenseItems) {
+      if (!item.product) continue; // Skip items with no product link
+
+      const productId =
+        typeof item.product === "object"
+          ? item.product._id || item.product
+          : item.product;
+
+      const product = await this.productModel
+        .findOne({ _id: productId, account: account._id })
+        .exec();
+
+      if (!product || !product.trackInventory) continue;
+
+      const transaction = new this.inventoryTransactionModel({
+        product: product._id,
+        status: InventoryTransactionStatus.PURCHASE,
+        quantity: item.quantity,
+        unitCost: item.unitCost || product.costPrice || 0,
+        reference: `Expense ${expenseRef}`,
+        referenceId: expenseId,
+        account: account._id,
+        createdBy: userId,
+        notes: `Auto-created from expense ${expenseRef}`,
+      });
+
+      await transaction.save(); // post-save hook updates product.currentStock
+    }
+  }
+
+  /**
+   * Reverse inventory transactions for a cancelled/deleted expense.
+   * Creates return_to_supplier transactions to undo the stock increase.
+   */
+  async reverseExpenseTransactions(
+    expenseId: string,
+    accountId: string,
+    userId: string,
+  ): Promise<void> {
+    const account = await this.companyModel.findById(accountId).exec();
+    if (!account) return;
+
+    // Find all purchase transactions linked to this expense
+    const purchaseTransactions = await this.inventoryTransactionModel
+      .find({
+        referenceId: expenseId,
+        account: account._id,
+        status: InventoryTransactionStatus.PURCHASE,
+      })
+      .exec();
+
+    for (const purchaseTx of purchaseTransactions) {
+      const reversal = new this.inventoryTransactionModel({
+        product: purchaseTx.product,
+        status: InventoryTransactionStatus.RETURN_TO_SUPPLIER,
+        quantity: purchaseTx.quantity,
+        unitCost: purchaseTx.unitCost,
+        reference: `Reversal of ${purchaseTx.reference}`,
+        referenceId: expenseId,
+        account: account._id,
+        createdBy: userId,
+        notes: `Auto-reversal: expense cancelled/deleted`,
+      });
+
+      await reversal.save(); // post-save hook recalculates stock
+    }
   }
 
   async findAllInventoryTransactions(
@@ -127,8 +379,11 @@ export class InventoryTransactionService {
       transactionType?: string;
       status?: string;
       warehouseId?: string;
-    }
-  ): Promise<{ inventoryTransactions: InventoryTransaction[]; total: number }> {
+    },
+  ): Promise<{
+    inventoryTransactions: InventoryTransaction[];
+    total: number;
+  }> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -147,22 +402,18 @@ export class InventoryTransactionService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const filter: any = { companyId: account._id };
+    const filter: any = { account: account._id };
 
     if (productId) {
-      filter.productId = productId;
+      filter.product = productId;
     }
 
-    if (transactionType) {
-      filter.transactionType = transactionType;
-    }
-
-    if (status) {
-      filter.status = status;
+    if (transactionType || status) {
+      filter.status = transactionType || status;
     }
 
     if (warehouseId) {
-      filter.warehouseId = warehouseId;
+      filter.warehouse = warehouseId;
     }
 
     if (search) {
@@ -178,8 +429,8 @@ export class InventoryTransactionService {
         .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
         .skip(skip)
         .limit(limit)
-        .populate("productId", "name sku currentStock")
-        .populate("warehouseId", "name code")
+        .populate("product", "name sku currentStock")
+        .populate("warehouse", "name code")
         .populate("createdBy", "firstName lastName email")
         .exec(),
       this.inventoryTransactionModel.countDocuments(filter).exec(),
@@ -191,16 +442,19 @@ export class InventoryTransactionService {
     };
   }
 
-  async findByIdInventoryTransaction(id: string, companyId: string): Promise<InventoryTransaction> {
+  async findByIdInventoryTransaction(
+    id: string,
+    companyId: string,
+  ): Promise<InventoryTransaction> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const transaction = await this.inventoryTransactionModel
-      .findOne({ _id: id, companyId: account._id })
-      .populate("productId", "name sku currentStock")
-      .populate("warehouseId", "name code")
+      .findOne({ _id: id, account: account._id })
+      .populate("product", "name sku currentStock")
+      .populate("warehouse", "name code")
       .populate("createdBy", "firstName lastName email")
       .exec();
 
@@ -214,7 +468,7 @@ export class InventoryTransactionService {
   async updateInventoryTransaction(
     id: string,
     updateInventoryTransactionDto: UpdateInventoryTransactionDto,
-    companyId: string
+    companyId: string,
   ): Promise<InventoryTransaction> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
@@ -222,56 +476,48 @@ export class InventoryTransactionService {
     }
 
     const existingTransaction = await this.inventoryTransactionModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .exec();
 
     if (!existingTransaction) {
       throw new NotFoundException("Inventory transaction not found");
     }
 
-    // Prevent updates to completed transactions that affect stock
-    // if (
-    //   existingTransaction.status === InventoryTransactionStatus.COMPLETED &&
-    //   (updateInventoryTransactionDto.quantity ||
-    //     updateInventoryTransactionDto.movementType)
-    // ) {
-    //   throw new BadRequestException(
-    //     "Cannot modify quantity or type of completed stock transactions"
-    //   );
-    // }
-
     // Check for duplicate reference if updating reference
     if (updateInventoryTransactionDto.reference) {
       const duplicateReference = await this.inventoryTransactionModel.findOne({
         reference: updateInventoryTransactionDto.reference,
-        companyId: account._id,
+        account: account._id,
         _id: { $ne: id },
       });
       if (duplicateReference) {
         throw new BadRequestException(
-          "Reference already exists in your account"
+          "Reference already exists in your account",
         );
       }
     }
 
     const transaction = await this.inventoryTransactionModel
       .findByIdAndUpdate(id, updateInventoryTransactionDto, { new: true })
-      .populate("productId", "name sku currentStock")
-      .populate("warehouseId", "name code")
+      .populate("product", "name sku currentStock")
+      .populate("warehouse", "name code")
       .populate("createdBy", "firstName lastName email")
       .exec();
 
     return transaction!;
   }
 
-  async removeInventoryTransaction(id: string, companyId: string): Promise<void> {
+  async removeInventoryTransaction(
+    id: string,
+    companyId: string,
+  ): Promise<void> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const transaction = await this.inventoryTransactionModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .exec();
 
     if (!transaction) {
@@ -281,7 +527,7 @@ export class InventoryTransactionService {
     // Prevent deletion of completed stock transactions
     if (transaction.status === InventoryTransactionStatus.COMPLETED) {
       throw new BadRequestException(
-        "Cannot delete completed stock transactions as they affect inventory levels"
+        "Cannot delete completed stock transactions as they affect inventory levels",
       );
     }
 
@@ -290,7 +536,7 @@ export class InventoryTransactionService {
 
   async getInventoryTransactionHistory(
     productId: string,
-    companyId: string
+    companyId: string,
   ): Promise<InventoryTransaction[]> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
@@ -299,7 +545,7 @@ export class InventoryTransactionService {
 
     // Verify product belongs to the same account
     const product = await this.productModel
-      .findOne({ _id: productId, companyId: account._id })
+      .findOne({ _id: productId, account: account._id })
       .exec();
 
     if (!product) {
@@ -308,11 +554,11 @@ export class InventoryTransactionService {
 
     return this.inventoryTransactionModel
       .find({
-        productId: new Types.ObjectId(productId),
-        companyId: account._id,
+        product: new Types.ObjectId(productId),
+        account: account._id,
       })
       .sort({ createdAt: -1 })
-      .populate("warehouseId", "name code")
+      .populate("warehouse", "name code")
       .populate("createdBy", "firstName lastName email")
       .exec();
   }
@@ -326,17 +572,19 @@ export class InventoryTransactionService {
     const [totalTransactions, recentTransactions, transactionsByType] =
       await Promise.all([
         this.inventoryTransactionModel.countDocuments({
-          companyId: account._id,
+          account: account._id,
         }),
         this.inventoryTransactionModel.countDocuments({
-          companyId: account._id,
-          createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          account: account._id,
+          createdAt: {
+            $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
         }),
         this.inventoryTransactionModel.aggregate([
-          { $match: { companyId: account._id } },
+          { $match: { account: account._id } },
           {
             $group: {
-              _id: "$transactionType",
+              _id: "$status",
               count: { $sum: 1 },
               totalValue: {
                 $sum: { $multiply: ["$quantity", "$unitCost"] },

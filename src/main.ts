@@ -7,10 +7,15 @@ import * as path from "path";
 import { ConfigService } from "@nestjs/config";
 import { AppModule } from "./app.module";
 import { configureCloudinary } from "./config/cloudinary.config";
+import * as bodyParser from "body-parser";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  // Increase body size limit for base64 image uploads
+  app.use(bodyParser.json({ limit: "10mb" }));
+  app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
 
   // Configure Cloudinary globally
   configureCloudinary(configService);
@@ -19,7 +24,7 @@ async function bootstrap() {
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: "cross-origin" },
-    })
+    }),
   );
   app.enableCors({
     origin: configService.get("FRONTEND_URL") || "http://localhost:3000",
@@ -47,14 +52,14 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-    })
+    }),
   );
 
   // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle("Streamline Suite API")
     .setDescription(
-      "NestJS backend API for Streamline Suite business management system"
+      "NestJS backend API for Streamline Suite business management system",
     )
     .setVersion("1.0")
     .addBearerAuth(
@@ -66,7 +71,7 @@ async function bootstrap() {
         description: "Enter JWT token",
         in: "header",
       },
-      "JWT-auth"
+      "JWT-auth",
     )
     .build();
 

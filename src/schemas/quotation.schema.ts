@@ -82,10 +82,10 @@ export class Quotation extends Document {
   @Prop() expectedProfitMargin: number;
 
   @Prop()
-  template?: string;
+  templateName?: string;
 
-  @Prop()
-  templateId?: string;
+  @Prop({ type: Types.ObjectId, ref: "Template",  })
+  template?: string;
 
   @Prop()
   accentColor?: string;

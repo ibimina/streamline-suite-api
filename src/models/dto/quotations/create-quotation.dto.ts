@@ -50,7 +50,7 @@ export class ItemDto {
 export class CreateQuotationDto {
   @IsMongoId()
   @IsNotEmpty()
-  customer: string; // Customer ObjectId reference (required)
+  customer: string; 
 
   @IsArray()
   @ArrayMinSize(1)
@@ -80,7 +80,7 @@ export class CreateQuotationDto {
 
   @IsOptional()
   @IsString()
-  templateId?: string;
+  templateName?: string;
 
   @IsOptional()
   @IsString()

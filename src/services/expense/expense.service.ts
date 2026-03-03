@@ -15,6 +15,9 @@ import { Account, AccountDocument } from "@/schemas/account.schema";
 import { CreateExpenseDto } from "@/models/dto/expenses/create-expense.dto";
 import { UpdateExpenseDto } from "@/models/dto/expenses/update-expense.dto";
 import { PaginationQuery, PaginatedResponse } from "@/common/types";
+import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
+import { InventoryTransactionService } from "../inventory-transaction/inventory-transaction.service";
 
 @Injectable()
 export class ExpenseService {
@@ -22,13 +25,15 @@ export class ExpenseService {
     @InjectModel(Expense.name)
     private expenseModel: Model<ExpenseDocument>,
     @InjectModel(Account.name)
-    private accountModel: Model<AccountDocument>
+    private accountModel: Model<AccountDocument>,
+    private readonly activityService: ActivityService,
+    private readonly inventoryTransactionService: InventoryTransactionService,
   ) {}
 
   async create(
     createExpenseDto: CreateExpenseDto,
     accountId: string,
-    userId: string
+    userId: string,
   ): Promise<Expense> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -37,27 +42,48 @@ export class ExpenseService {
 
     // Generate expense number
     const lastExpense = await this.expenseModel
-      .findOne({ accountId: account._id })
+      .findOne({ account: account._id })
       .sort({ createdAt: -1 })
       .exec();
 
     let expenseNumber = "EXP-00001";
     if (lastExpense && lastExpense.expenseNumber) {
-      const lastNumber = parseInt(
-        lastExpense.expenseNumber.split("-")[1]
-      );
+      const lastNumber = parseInt(lastExpense.expenseNumber.split("-")[1]);
       expenseNumber = `EXP-${(lastNumber + 1).toString().padStart(5, "0")}`;
     }
 
     const expense = new this.expenseModel({
       ...createExpenseDto,
+      items: (createExpenseDto.items || []).map((item) => ({
+        ...item,
+        lineTotal: item.quantity * item.unitCost,
+      })),
       expenseNumber,
-      accountId: account._id,
+      account: account._id,
       createdBy: userId,
       date: new Date(createExpenseDto.date),
     });
 
-    return expense.save();
+    const savedExpense = await expense.save();
+
+    // Log activity
+    await this.activityService.create({
+      type: ActivityType.EXPENSE_CREATED,
+      title: "Expense created",
+      description: `Expense ${savedExpense.expenseNumber} - ${savedExpense.description} recorded`,
+      account: account._id as any,
+      user: userId as any,
+      entityId: savedExpense._id,
+      entityType: "expense",
+      metadata: {
+        expenseNumber: savedExpense.expenseNumber,
+        amount: savedExpense.amount,
+        category: savedExpense.category,
+        description: savedExpense.description,
+      },
+    });
+
+    return savedExpense;
   }
 
   async findAll(
@@ -68,7 +94,7 @@ export class ExpenseService {
       startDate?: string;
       endDate?: string;
       vendor?: string;
-    }
+    },
   ): Promise<PaginatedResponse<Expense>> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -89,7 +115,7 @@ export class ExpenseService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const filter: any = { accountId: account._id };
+    const filter: any = { account: account._id };
 
     if (search) {
       filter.$or = [
@@ -130,6 +156,7 @@ export class ExpenseService {
         .populate("vendor", "name email")
         .populate("createdBy", "firstName lastName email")
         .populate("approvedBy", "firstName lastName email")
+        .populate("items.product", "name sku")
         .exec(),
       this.expenseModel.countDocuments(filter).exec(),
     ]);
@@ -147,10 +174,11 @@ export class ExpenseService {
     }
 
     const expense = await this.expenseModel
-      .findOne({ _id: id, accountId: account._id })
+      .findOne({ _id: id, account: account._id })
       .populate("vendor", "name email phone address")
       .populate("createdBy", "firstName lastName email")
       .populate("approvedBy", "firstName lastName email")
+      .populate("items.product", "name sku currentStock costPrice")
       .exec();
 
     if (!expense) {
@@ -163,7 +191,7 @@ export class ExpenseService {
   async update(
     id: string,
     updateExpenseDto: UpdateExpenseDto,
-    accountId: string
+    accountId: string,
   ): Promise<Expense> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -172,7 +200,7 @@ export class ExpenseService {
 
     const expense = await this.expenseModel.findOne({
       _id: id,
-      accountId: account._id,
+      account: account._id,
     });
 
     if (!expense) {
@@ -199,7 +227,7 @@ export class ExpenseService {
     id: string,
     status: ExpenseStatus,
     accountId: string,
-    userId: string
+    userId: string,
   ): Promise<Expense> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -208,7 +236,7 @@ export class ExpenseService {
 
     const expense = await this.expenseModel.findOne({
       _id: id,
-      accountId: account._id,
+      account: account._id,
     });
 
     if (!expense) {
@@ -222,15 +250,70 @@ export class ExpenseService {
       updateData.approvedAt = new Date();
     }
 
-    return this.expenseModel
+    const previousStatus = expense.status;
+
+    const updatedExpense = await this.expenseModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .populate("vendor", "name email")
       .populate("createdBy", "firstName lastName email")
       .populate("approvedBy", "firstName lastName email")
+      .populate("items.product", "name sku trackInventory")
       .exec();
+
+    // Create purchase inventory transactions when approved/paid (first time only)
+    if (
+      updatedExpense &&
+      updatedExpense.items &&
+      updatedExpense.items.length > 0
+    ) {
+      const isNowApprovedOrPaid =
+        status === ExpenseStatus.APPROVED || status === ExpenseStatus.PAID;
+      const wasNotApprovedOrPaid =
+        previousStatus !== ExpenseStatus.APPROVED &&
+        previousStatus !== ExpenseStatus.PAID;
+
+      if (isNowApprovedOrPaid && wasNotApprovedOrPaid) {
+        try {
+          await this.inventoryTransactionService.createPurchaseTransactionsForExpense(
+            updatedExpense.items as any[],
+            updatedExpense.expenseNumber,
+            updatedExpense._id.toString(),
+            accountId,
+            userId,
+          );
+        } catch (err) {
+          console.error(
+            `Failed to create purchase transactions for expense ${updatedExpense.expenseNumber}:`,
+            err,
+          );
+        }
+      }
+
+      // Reverse inventory transactions when cancelled from approved/paid
+      if (
+        status === ExpenseStatus.CANCELLED &&
+        (previousStatus === ExpenseStatus.APPROVED ||
+          previousStatus === ExpenseStatus.PAID)
+      ) {
+        try {
+          await this.inventoryTransactionService.reverseExpenseTransactions(
+            updatedExpense._id.toString(),
+            accountId,
+            userId,
+          );
+        } catch (err) {
+          console.error(
+            `Failed to reverse transactions for expense ${updatedExpense.expenseNumber}:`,
+            err,
+          );
+        }
+      }
+    }
+
+    return updatedExpense;
   }
 
-  async remove(id: string, accountId: string): Promise<void> {
+  async remove(id: string, accountId: string, userId?: string): Promise<void> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -238,7 +321,7 @@ export class ExpenseService {
 
     const expense = await this.expenseModel.findOne({
       _id: id,
-      accountId: account._id,
+      account: account._id,
     });
 
     if (!expense) {
@@ -249,13 +332,34 @@ export class ExpenseService {
       throw new BadRequestException("Cannot delete paid expense");
     }
 
+    // Reverse inventory transactions if expense was approved with product items
+    if (
+      expense.status === ExpenseStatus.APPROVED &&
+      expense.items &&
+      expense.items.length > 0 &&
+      userId
+    ) {
+      try {
+        await this.inventoryTransactionService.reverseExpenseTransactions(
+          expense._id.toString(),
+          accountId,
+          userId,
+        );
+      } catch (err) {
+        console.error(
+          `Failed to reverse transactions for deleted expense ${expense.expenseNumber}:`,
+          err,
+        );
+      }
+    }
+
     await this.expenseModel.findByIdAndDelete(id).exec();
   }
 
   async findByCategory(
     accountId: string,
     category: ExpenseCategory,
-    query: PaginationQuery
+    query: PaginationQuery,
   ): Promise<PaginatedResponse<Expense>> {
     return this.findAll(accountId, { ...query, category });
   }
@@ -270,7 +374,7 @@ export class ExpenseService {
 
     // Get status-based stats
     const statusStats = await this.expenseModel.aggregate([
-      { $match: { accountId: accountObjectId } },
+      { $match: { account: accountObjectId } },
       {
         $group: {
           _id: "$status",
@@ -282,7 +386,7 @@ export class ExpenseService {
 
     // Get category-based stats
     const categoryStats = await this.expenseModel.aggregate([
-      { $match: { accountId: accountObjectId } },
+      { $match: { account: accountObjectId } },
       {
         $group: {
           _id: "$category",
@@ -300,7 +404,7 @@ export class ExpenseService {
     const monthlyTrend = await this.expenseModel.aggregate([
       {
         $match: {
-          accountId: accountObjectId,
+          account: accountObjectId,
           date: { $gte: twelveMonthsAgo },
         },
       },

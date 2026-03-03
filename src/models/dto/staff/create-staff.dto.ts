@@ -46,10 +46,6 @@ export class CreateStaffDto {
   @Transform(({ value }) => value?.trim()?.toLowerCase())
   email: string;
 
-  @ApiProperty({ description: "Password (minimum 8 characters)", example: "securePass123!" })
-  @IsString()
-  @MinLength(8)
-  password: string;
 
   @ApiPropertyOptional({ description: "Staff phone number", example: "+1234567890" })
   @IsOptional()
@@ -132,14 +128,14 @@ export class CreateStaffDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({
-    description: "List of permissions assigned to this staff member",
-    type: [String],
-    enum: PermissionName,
-    example: [PermissionName.VIEW_DASHBOARD, PermissionName.PROCESS_ORDERS],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsEnum(PermissionName, { each: true })
-  permissions?: PermissionName[];
+  // @ApiPropertyOptional({
+  //   description: "List of permissions assigned to this staff member",
+  //   type: [String],
+  //   enum: PermissionName,
+  //   example: [PermissionName.VIEW_DASHBOARD, PermissionName.PROCESS_ORDERS],
+  // })
+  // @IsOptional()
+  // @IsArray()
+  // @IsEnum(PermissionName, { each: true })
+  // permissions?: PermissionName[];
 }

@@ -122,6 +122,11 @@ export class CreateInvoiceDto {
   @ApiPropertyOptional({ description: "Template name" })
   @IsOptional()
   @IsString()
+  templateName?: string;
+
+  @ApiPropertyOptional({ description: "Template ID for custom template" })
+  @IsOptional()
+  @IsString()
   template?: string;
 
   @ApiPropertyOptional({ description: "Accent color" })

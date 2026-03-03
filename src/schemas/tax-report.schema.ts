@@ -22,7 +22,7 @@ export enum TaxReportStatus {
 @Schema({ timestamps: true })
 export class TaxReport extends Document {
   @Prop({ type: Types.ObjectId, ref: "Account", required: true })
-  accountId: Types.ObjectId;
+  account: Types.ObjectId;
 
   @Prop({ required: true })
   period: string; // e.g., "Q1 2024", "2024-01"

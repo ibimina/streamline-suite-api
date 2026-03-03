@@ -16,7 +16,11 @@ import {
   PaginatedResponse,
 } from "@/common/types";
 import { Account, AccountDocument } from "@/schemas/account.schema";
+import { Customer, CustomerDocument } from "@/schemas/customer.schema";
 import { BaseFinancialService } from "@/common/utils/financial-calculator";
+import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
+import { InventoryTransactionService } from "../inventory-transaction/inventory-transaction.service";
 
 @Injectable()
 export class InvoicesService extends BaseFinancialService {
@@ -25,6 +29,9 @@ export class InvoicesService extends BaseFinancialService {
     @InjectModel(Quotation.name)
     private quotationModel: Model<QuotationDocument>,
     @InjectModel(Account.name) private accountModel: Model<AccountDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    private readonly activityService: ActivityService,
+    private readonly inventoryTransactionService: InventoryTransactionService,
   ) {
     super();
   }
@@ -100,6 +107,21 @@ export class InvoicesService extends BaseFinancialService {
         status: QuotationStatus.ACCEPTED,
       });
     }
+
+    // Log activity
+    await this.activityService.create({
+      type: ActivityType.INVOICE_CREATED,
+      title: "Invoice created",
+      description: `Invoice ${savedInvoice.uniqueId} created`,
+      account: account._id,
+      user: userId as any,
+      entityId: savedInvoice._id,
+      entityType: "invoice",
+      metadata: {
+        invoiceId: savedInvoice.uniqueId,
+        amount: savedInvoice.grandTotal,
+      },
+    });
 
     return savedInvoice;
   }
@@ -241,7 +263,7 @@ export class InvoicesService extends BaseFinancialService {
       .exec();
   }
 
-  async remove(id: string, accountId: string): Promise<void> {
+  async remove(id: string, accountId: string, userId?: string): Promise<void> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
@@ -258,6 +280,26 @@ export class InvoicesService extends BaseFinancialService {
       throw new BadRequestException("Cannot delete paid invoice");
     }
 
+    // Reverse inventory if invoice had stock deducted (was Sent or Overdue)
+    if (
+      [InvoiceStatus.SENT, InvoiceStatus.OVERDUE].includes(
+        invoice.status as InvoiceStatus,
+      )
+    ) {
+      try {
+        await this.inventoryTransactionService.reverseInvoiceTransactions(
+          invoice._id.toString(),
+          accountId,
+          userId || invoice.createdBy?.toString(),
+        );
+      } catch (err) {
+        console.error(
+          `Failed to reverse inventory for deleted invoice ${invoice.uniqueId}:`,
+          err,
+        );
+      }
+    }
+
     await this.invoiceModel.findByIdAndDelete(invoice._id).exec();
   }
 
@@ -265,6 +307,7 @@ export class InvoicesService extends BaseFinancialService {
     id: string,
     status: InvoiceStatus,
     accountId: string,
+    userId?: string,
   ): Promise<Invoice> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -278,6 +321,7 @@ export class InvoicesService extends BaseFinancialService {
       throw new NotFoundException("Invoice not found");
     }
 
+    const previousStatus = invoice.status;
     const updateData: Partial<Invoice> = { status };
 
     // Set status-specific dates
@@ -287,38 +331,208 @@ export class InvoicesService extends BaseFinancialService {
       updateData.paidDate = new Date();
     }
 
-    return await this.invoiceModel
+    const updatedInvoice = await this.invoiceModel
       .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
+
+    // Deduct stock when invoice is Sent or Paid (only if stock wasn't already deducted)
+    const stockAlreadyDeducted = [
+      InvoiceStatus.SENT,
+      InvoiceStatus.PAID,
+      InvoiceStatus.OVERDUE,
+    ].includes(previousStatus as InvoiceStatus);
+
+    if (
+      (status === InvoiceStatus.SENT || status === InvoiceStatus.PAID) &&
+      !stockAlreadyDeducted
+    ) {
+      try {
+        await this.inventoryTransactionService.createSaleTransactionsForInvoice(
+          invoice.items,
+          invoice.uniqueId,
+          invoice._id.toString(),
+          accountId,
+          userId || invoice.createdBy?.toString(),
+        );
+      } catch (err) {
+        console.error(
+          `Failed to create inventory transactions for invoice ${invoice.uniqueId}:`,
+          err,
+        );
+      }
+    }
+
+    // Reverse stock when invoice is Cancelled (if it was previously Sent/Paid/Overdue)
+    if (
+      status === InvoiceStatus.CANCELLED &&
+      [InvoiceStatus.SENT, InvoiceStatus.PAID, InvoiceStatus.OVERDUE].includes(
+        previousStatus as InvoiceStatus,
+      )
+    ) {
+      try {
+        await this.inventoryTransactionService.reverseInvoiceTransactions(
+          invoice._id.toString(),
+          accountId,
+          userId || invoice.createdBy?.toString(),
+        );
+      } catch (err) {
+        console.error(
+          `Failed to reverse inventory for cancelled invoice ${invoice.uniqueId}:`,
+          err,
+        );
+      }
+    }
+
+    // Log activity for status changes
+    if (status === InvoiceStatus.SENT) {
+      await this.activityService.create({
+        type: ActivityType.INVOICE_SENT,
+        title: "Invoice sent",
+        description: `Invoice ${invoice.uniqueId} was sent to customer`,
+        account: account._id,
+        user: userId as any,
+        entityId: invoice._id as any,
+        entityType: "invoice",
+        metadata: { invoiceId: invoice.uniqueId, amount: invoice.grandTotal },
+      });
+    } else if (status === InvoiceStatus.PAID) {
+      await this.activityService.create({
+        type: ActivityType.INVOICE_PAID,
+        title: "Invoice paid",
+        description: `Invoice ${invoice.uniqueId} has been paid`,
+        account: account._id,
+        user: userId as any,
+        entityId: invoice._id as any,
+        entityType: "invoice",
+        metadata: { invoiceId: invoice.uniqueId, amount: invoice.grandTotal },
+      });
+    }
+
+    return updatedInvoice;
   }
 
-  async getStats(accountId: string): Promise<any> {
-    const stats = await this.invoiceModel.aggregate([
-      { $match: { accountId } },
-      {
-        $group: {
-          _id: "$status",
-          count: { $sum: 1 },
-          totalAmount: { $sum: "$total" },
+  async getStats(
+    accountId: string,
+    filters?: { startDate?: string; endDate?: string; customerId?: string },
+  ): Promise<any> {
+    const account = await this.accountModel.findById(accountId).exec();
+    if (!account) {
+      throw new NotFoundException("Account not found");
+    }
+
+    // Build dynamic match filter
+    const matchFilter: Record<string, any> = { account: account._id };
+
+    if (filters?.startDate || filters?.endDate) {
+      matchFilter.createdAt = {};
+      if (filters.startDate) {
+        matchFilter.createdAt.$gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        matchFilter.createdAt.$lte = new Date(filters.endDate);
+      }
+    }
+
+    if (filters?.customerId) {
+      matchFilter.customer = new Types.ObjectId(filters.customerId);
+    }
+
+    const [stats, topCustomers] = await Promise.all([
+      // Status breakdown
+      this.invoiceModel.aggregate([
+        { $match: matchFilter },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+            totalAmount: { $sum: "$grandTotal" },
+            totalGrossProfit: { $sum: "$totalGrossProfit" },
+            totalNetProfit: { $sum: "$totalNetProfit" },
+          },
         },
-      },
+      ]),
+
+      // Top customers by invoice value
+      this.invoiceModel.aggregate([
+        { $match: matchFilter },
+        {
+          $group: {
+            _id: "$customer",
+            totalRevenue: { $sum: "$grandTotal" },
+            invoiceCount: { $sum: 1 },
+            paidAmount: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "Paid"] }, "$grandTotal", 0],
+              },
+            },
+            outstandingAmount: {
+              $sum: {
+                $cond: [
+                  { $in: ["$status", ["Sent", "Overdue", "Partial"]] },
+                  {
+                    $cond: [
+                      { $gt: ["$balanceDue", 0] },
+                      "$balanceDue",
+                      "$grandTotal",
+                    ],
+                  },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        { $sort: { totalRevenue: -1 } },
+        { $limit: 5 },
+      ]),
     ]);
+
+    // Populate customer details using Mongoose (same mechanism as .populate())
+    const customerIds = topCustomers.map((c) => c._id);
+    const customerDocs = await this.customerModel
+      .find({ _id: { $in: customerIds } })
+      .select("companyName fullName email")
+      .lean()
+      .exec();
+    const customerMap = new Map(customerDocs.map((c) => [c._id.toString(), c]));
 
     const result = {
       total: 0,
+      totalValue: 0,
+      totalGrossProfit: 0,
+      totalNetProfit: 0,
       draft: { count: 0, amount: 0 },
       sent: { count: 0, amount: 0 },
       paid: { count: 0, amount: 0 },
       overdue: { count: 0, amount: 0 },
       cancelled: { count: 0, amount: 0 },
+      topCustomers: topCustomers.map((c) => {
+        const cust = customerMap.get(c._id.toString());
+        return {
+          customerId: c._id,
+          companyName:
+            cust?.companyName || cust?.fullName || "Unknown Customer",
+          email: cust?.email || "",
+          totalRevenue: c.totalRevenue,
+          invoiceCount: c.invoiceCount,
+          paidAmount: c.paidAmount,
+          outstandingAmount: c.outstandingAmount,
+        };
+      }),
     };
 
     stats.forEach((stat) => {
       result.total += stat.count;
-      result[stat._id.toLowerCase()] = {
-        count: stat.count,
-        amount: stat.totalAmount,
-      };
+      result.totalValue += stat.totalAmount || 0;
+      result.totalGrossProfit += stat.totalGrossProfit || 0;
+      result.totalNetProfit += stat.totalNetProfit || 0;
+      const statusKey = stat._id?.toLowerCase();
+      if (statusKey && result[statusKey] !== undefined) {
+        result[statusKey] = {
+          count: stat.count,
+          amount: stat.totalAmount || 0,
+        };
+      }
     });
 
     return result;

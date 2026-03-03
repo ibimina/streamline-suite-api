@@ -1,0 +1,74 @@
+import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { Document, Types } from "mongoose";
+import { PermissionName, RoleName } from "@/models/enums/shared.enum";
+
+export type StaffDocument = Staff & Document;
+
+@Schema({ timestamps: true })
+export class Staff {
+  @Prop({ required: true, trim: true })
+  firstName: string;
+
+  @Prop({ required: true, trim: true })
+  lastName: string;
+
+  // Computed full name
+  get name(): string {
+    return `${this.firstName} ${this.lastName}`;
+  }
+
+  @Prop({ required: true, unique: true, lowercase: true, trim: true })
+  email: string;
+
+ @Prop({ required: true, trim: true })
+  address: string;
+  
+  @Prop({
+    type: String,
+    enum: RoleName,
+    default: "Staff",
+  })
+  role: string;
+
+  @Prop({ type: Types.ObjectId, ref: "Account" })
+  account: Types.ObjectId;
+
+  // HR/Payroll fields
+  @Prop({ default: 0 })
+  salary: number;
+
+  @Prop()
+  employeeId?: string;
+
+  @Prop()
+  department?: string;
+
+  @Prop()
+  position?: string;
+
+  @Prop()
+  hireDate?: Date;
+
+  @Prop({ default: true })
+  isActive: boolean;
+
+  @Prop()
+  phone?: string;
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  createdBy?: Types.ObjectId;
+
+//   @Prop({ type: [String], default: [], enum: PermissionName })
+//   permissions?: string[];
+
+  @Prop({ type: Types.ObjectId, ref: "User" })
+  updatedBy?: Types.ObjectId;
+
+  @Prop({ default: Date.now })
+  createdAt: Date;
+
+  @Prop({ default: Date.now })
+  updatedAt: Date;
+}
+
+export const StaffSchema = SchemaFactory.createForClass(Staff);

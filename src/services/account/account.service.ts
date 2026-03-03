@@ -4,13 +4,14 @@ import {
   ForbiddenException,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, ObjectId } from "mongoose";
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
 import { CloudinaryService } from "../cloudinary/cloudinary.service";
 import { CreateAccountDto } from "@/models/dto/account/create-account.dto";
 import { UpdateAccountDto } from "@/models/dto/account/update-account.dto";
 import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
 
 @Injectable()
 export class AccountService {
@@ -21,21 +22,21 @@ export class AccountService {
     @InjectModel("Quotation") private quotationModel: Model<any>,
     @InjectModel("Product") private productModel: Model<any>,
     private readonly cloudinaryService: CloudinaryService,
-    private readonly activityService: ActivityService
+    private readonly activityService: ActivityService,
   ) {}
 
   async getStats(accountId: string): Promise<any> {
     try {
+      const account = await this.accountModel.findById(accountId).exec();
       // Date ranges for calculations
       const now = new Date();
       const currentYear = now.getFullYear();
       const startOfMonth = new Date(currentYear, now.getMonth(), 1);
       const startOfWeek = new Date(now);
       startOfWeek.setDate(now.getDate() - now.getDay());
-
+      startOfWeek.setHours(0, 0, 0, 0); // Reset to midnight
       // Year to date range (January 1st to current date)
       const startOfYear = new Date(currentYear, 0, 1); // January 1st of current year
-console.log(startOfYear);
       // Parallel execution of all aggregations for better performance
       const [
         salesData,
@@ -51,8 +52,8 @@ console.log(startOfYear);
         this.invoiceModel.aggregate([
           {
             $match: {
-              accountId: accountId,
-              status: { $in: ["PAID", "PARTIALLY_PAID"] },
+              account: account._id,
+              status: { $in: ["Paid", "Partial"] },
               createdAt: { $gte: startOfYear },
             },
           },
@@ -76,14 +77,25 @@ console.log(startOfYear);
         this.invoiceModel.aggregate([
           {
             $match: {
-              accountId: accountId,
-              status: { $in: ["SENT", "OVERDUE", "PARTIALLY_PAID"] },
+              account: account._id,
+              status: { $in: ["Sent", "Overdue", "Partial"] },
+            },
+          },
+          {
+            $addFields: {
+              effectiveBalance: {
+                $cond: [
+                  { $gt: ["$balanceDue", 0] },
+                  "$balanceDue",
+                  "$grandTotal",
+                ],
+              },
             },
           },
           {
             $group: {
               _id: null,
-              totalOutstanding: { $sum: "$balanceDue" },
+              totalOutstanding: { $sum: "$effectiveBalance" },
               count: { $sum: 1 },
               overdue: {
                 $sum: {
@@ -92,7 +104,7 @@ console.log(startOfYear);
               },
               overdueAmount: {
                 $sum: {
-                  $cond: [{ $lt: ["$dueDate", now] }, "$balanceDue", 0],
+                  $cond: [{ $lt: ["$dueDate", now] }, "$effectiveBalance", 0],
                 },
               },
             },
@@ -103,7 +115,7 @@ console.log(startOfYear);
         this.quotationModel.aggregate([
           {
             $match: {
-              accountId: accountId,
+              account: account._id,
               createdAt: { $gte: startOfWeek },
             },
           },
@@ -120,8 +132,8 @@ console.log(startOfYear);
         this.invoiceModel.aggregate([
           {
             $match: {
-              accountId: accountId,
-              status: { $in: ["PAID", "PARTIALLY_PAID"] },
+              account: account._id,
+              status: { $in: ["Paid", "Partial"] },
               createdAt: { $gte: startOfMonth },
             },
           },
@@ -150,7 +162,7 @@ console.log(startOfYear);
         this.productModel.aggregate([
           {
             $match: {
-              companyId: accountId,
+              account: account._id,
               isActive: true,
               trackInventory: true,
               $expr: { $lte: ["$currentStock", "$lowStockAlert"] },
@@ -172,17 +184,17 @@ console.log(startOfYear);
         ]),
 
         // 6. Recent activities from activity service
-        this.activityService.getRecentActivities(accountId, 10),
+        this.activityService.getRecentActivities(account._id, 10),
 
         // 7. Total customers
-        this.customerModel.countDocuments({ accountId }),
+        this.customerModel.countDocuments({ account: account._id }),
 
         // 8. Monthly growth comparison (current year)
         this.invoiceModel.aggregate([
           {
             $match: {
-              accountId: accountId,
-              status: { $in: ["PAID", "PARTIALLY_PAID"] },
+              account: account._id,
+              status: { $in: ["Paid", "Partial"] },
               createdAt: { $gte: startOfYear },
             },
           },
@@ -202,15 +214,15 @@ console.log(startOfYear);
       // Process and format the results
       const totalRevenueYTD = salesData.reduce(
         (sum, item) => sum + item.totalRevenue,
-        0
+        0,
       );
       const totalProfitYTD = salesData.reduce(
         (sum, item) => sum + item.totalProfit,
-        0
+        0,
       );
       const totalInvoicesYTD = salesData.reduce(
         (sum, item) => sum + item.invoiceCount,
-        0
+        0,
       );
 
       // Outstanding invoices summary
@@ -229,7 +241,7 @@ console.log(startOfYear);
           acc.total.value += item.totalValue;
           return acc;
         },
-        { total: { count: 0, value: 0 } }
+        { total: { count: 0, value: 0 } },
       );
 
       // Recent activities are now provided by ActivityService
@@ -237,11 +249,11 @@ console.log(startOfYear);
 
       // Calculate growth metrics
       const currentMonthData = monthlyGrowth.find(
-        (m) => m._id.year === currentYear && m._id.month === now.getMonth() + 1
+        (m) => m._id.year === currentYear && m._id.month === now.getMonth() + 1,
       ) || { revenue: 0, count: 0 };
 
       const lastMonthData = monthlyGrowth.find(
-        (m) => m._id.year === currentYear && m._id.month === now.getMonth()
+        (m) => m._id.year === currentYear && m._id.month === now.getMonth(),
       ) || { revenue: 0, count: 0 };
 
       const revenueGrowth =
@@ -309,15 +321,16 @@ console.log(startOfYear);
           invoices: item.invoiceCount,
         })),
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error in getStats:", error);
-      throw new Error(`Failed to fetch account statistics: ${error.message}`);
+      const message = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Failed to fetch account statistics: ${message}`);
     }
   }
 
   async create(
     createAccountDto: CreateAccountDto,
-    userId: string
+    userId: string,
   ): Promise<Account> {
     const account = new this.accountModel({
       ...createAccountDto,
@@ -340,7 +353,7 @@ console.log(startOfYear);
   async update(
     id: string,
     updateAccountDto: UpdateAccountDto,
-    userId: string
+    userId: string,
   ): Promise<Account> {
     const account = await this.accountModel.findById(id).exec();
 
@@ -349,22 +362,41 @@ console.log(startOfYear);
     }
 
     Object.assign(account, updateAccountDto);
-    return account.save();
+    const updatedAccount = await account.save();
+
+    // Log account updated activity
+    await this.activityService.create({
+      type: ActivityType.ACCOUNT_UPDATED,
+      title: "Account updated",
+      description: `Account settings were updated`,
+      account: account._id,
+      user: userId as any,
+      entityId: account._id,
+      entityType: "account",
+      metadata: {
+        accountName: account.name,
+      },
+    });
+
+    return updatedAccount;
   }
 
-  async uploadLogo(
-    uploadFileDto: UploadFileDto,
-    companyId: string
-  ): Promise<any> {
-    const account = await this.accountModel.findById(companyId).exec();
+  async uploadLogo(file: string, accountId: string): Promise<any> {
+    const account = await this.accountModel.findById(accountId).exec();
 
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
-    const result = await this.cloudinaryService.uploadImage(uploadFileDto);
+    const result = await this.cloudinaryService.uploadImage({
+      file,
+      imagePath: `logos/${accountId}`,
+      resourceType: "image",
+      name: "company-logo",
+      description: "Company logo",
+    });
 
-    await this.accountModel.findByIdAndUpdate(companyId, {
+    await this.accountModel.findByIdAndUpdate(accountId, {
       logoUrl: result.secure_url,
       publicId: result.public_id,
     });
@@ -376,7 +408,7 @@ console.log(startOfYear);
     // Check permissions
     if (account.ownerId.toString() !== userId) {
       throw new ForbiddenException(
-        "You do not have permission to update this account"
+        "You do not have permission to update this account",
       );
     }
 

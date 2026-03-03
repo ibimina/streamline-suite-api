@@ -16,6 +16,7 @@ import { JwtPayload } from "@/models/interfaces";
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { ActivityService } from "../activity/activity.service";
 import { ActivityType } from "@/models/enums/shared.enum";
+import { getCurrencyFromCountry } from "@/common/utils/currency.util";
 
 @Injectable()
 export class AuthService {
@@ -24,7 +25,7 @@ export class AuthService {
     @InjectModel(Account.name) private accountModel: Model<AccountDocument>,
     private jwtService: JwtService,
     private blacklistService: TokenFreeBlacklistService,
-    private activityService: ActivityService
+    private activityService: ActivityService,
   ) {}
 
   async registerCompany(createCompanyandUserDto: CreateCompanyandUserDto) {
@@ -54,7 +55,7 @@ export class AuthService {
       industry: createCompanyandUserDto.industry,
       phoneNumber: createCompanyandUserDto.phoneNumber,
       companySize: createCompanyandUserDto.companySize,
-
+      currency: getCurrencyFromCountry(createCompanyandUserDto.country),
     });
 
     await account.save();
@@ -62,7 +63,7 @@ export class AuthService {
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(
       createCompanyandUserDto.password,
-      saltRounds
+      saltRounds,
     );
 
     // Create user
@@ -101,13 +102,11 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const user = await this.userModel
-      .findOne({ email })
-      .exec();
+    const user = await this.userModel.findOne({ email }).exec();
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException(
-        "Invalid credentials or account inactive"
+        "Invalid credentials or account inactive",
       );
     }
 
@@ -122,9 +121,9 @@ export class AuthService {
     const tokens = await this.generateTokens(user);
 
     await user.populate({
-        path: "account",
-        populate: "users",
-      })
+      path: "account",
+      populate: "users",
+    });
 
     await this.activityService.create({
       account: user.account?._id as any,
@@ -197,7 +196,7 @@ export class AuthService {
   async changePassword(
     userId: string,
     currentPassword: string,
-    newPassword: string
+    newPassword: string,
   ) {
     const user = await this.userModel.findById(userId);
 
@@ -208,7 +207,7 @@ export class AuthService {
     // Verify current password
     const isCurrentPasswordValid = await bcrypt.compare(
       currentPassword,
-      user.password
+      user.password,
     );
 
     if (!isCurrentPasswordValid) {
@@ -242,7 +241,7 @@ export class AuthService {
 
   async logout(
     token: string,
-    userId: string
+    userId: string,
   ): Promise<{ message: string; success: boolean }> {
     try {
       const user = await this.userModel.findById(userId).exec();
@@ -274,13 +273,13 @@ export class AuthService {
   }
 
   async logoutFromAllDevices(
-    userId: string
+    userId: string,
   ): Promise<{ message: string; success: boolean }> {
     try {
       // Set global logout timestamp - tokens issued before this are invalid
       await this.blacklistService.setGlobalLogoutTimestamp(
         userId,
-        "logout-all"
+        "logout-all",
       );
 
       return {
@@ -294,7 +293,7 @@ export class AuthService {
 
   async revokeToken(
     token: string,
-    userId: string
+    userId: string,
   ): Promise<{ message: string; success: boolean }> {
     try {
       // Since we don't store individual tokens, revoking means invalidating all user tokens

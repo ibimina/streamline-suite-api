@@ -74,11 +74,11 @@ export class Product {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop()
-  companyId: string;
+  @Prop({ type: Types.ObjectId, ref: "Account", required: true })
+  account: Types.ObjectId;
 
-  @Prop()
-  createdBy: string;
+  @Prop({ type: Types.ObjectId, ref: "User", required: true })
+  createdBy: Types.ObjectId;
 
   @Prop({type: String, enum: ["stock_in", "stock_out", "discontinued"], default: "stock_in"})
   status: string;

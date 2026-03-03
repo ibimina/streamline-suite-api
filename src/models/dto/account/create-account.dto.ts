@@ -1,6 +1,5 @@
 import {
   IsString,
-  IsOptional,
   IsEmail,
 } from "class-validator";
 import { Transform } from "class-transformer";

@@ -1,6 +1,6 @@
 import { InventoryTransactionStatus } from "@/common/types";
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document, Schema as MongooseSchema } from "mongoose";
+import { Document, Schema as MongooseSchema, Types } from "mongoose";
 
 export type InventoryTransactionDocument = InventoryTransaction & Document;
 
@@ -40,11 +40,11 @@ export class InventoryTransaction {
   @Prop()
   notes: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: "User" })
+  @Prop({ type: Types.ObjectId, ref: "User" })
   createdBy: string;
 
-  @Prop()
-  companyId: string;
+  @Prop({ type: Types.ObjectId, ref: "Account", required: true })
+  account: Types.ObjectId;
 
   // Calculated fields
   @Prop()
@@ -76,7 +76,7 @@ InventoryTransactionSchema.post("save", async function () {
 
     // Aggregate all transactions for this product (and same account if present)
     const query: any = { product: this.product };
-    if (this.companyId) query.companyId = this.companyId;
+    if (this.account) query.account = this.account;
 
     const txs = await TxModel.find(query).sort({ createdAt: 1 }).lean();
 
@@ -119,17 +119,17 @@ InventoryTransactionSchema.post("save", async function () {
 
     // Update product master stock / average cost (best-effort)
     await ProductModel.findByIdAndUpdate(this.product, {
-      stock: runningQty,
-      averageCost: avgCost,
+      currentStock: runningQty,
+      costPrice: avgCost,
     }).exec();
 
     console.log(
-      "Inventory transaction saved, stock and average cost recalculated."
+      "Inventory transaction saved, stock and average cost recalculated.",
     );
   } catch (err) {
     console.error(
       "Failed to recalculate inventory after transaction save:",
-      err
+      err,
     );
   }
   console.log("Inventory transaction saved, updating product stock...");

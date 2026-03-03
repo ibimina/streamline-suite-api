@@ -121,7 +121,7 @@ export class Customer {
   notes?: string;
 
   @Prop({ type: Types.ObjectId, ref: "Account" })
-  companyId: Types.ObjectId;
+  account: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: "User" })
   createdBy: Types.ObjectId;

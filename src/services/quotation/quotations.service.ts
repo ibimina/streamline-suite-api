@@ -18,6 +18,8 @@ import {
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { BaseFinancialService } from "@/common/utils/financial-calculator";
 import { Customer, CustomerDocument } from "@/schemas/customer.schema";
+import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
 
 @Injectable()
 export class QuotationsService extends BaseFinancialService {
@@ -30,6 +32,7 @@ export class QuotationsService extends BaseFinancialService {
     private accountModel: Model<AccountDocument>,
     @InjectModel(Customer.name)
     private customerModel: Model<CustomerDocument>,
+    private readonly activityService: ActivityService,
   ) {
     super();
   }
@@ -79,16 +82,41 @@ export class QuotationsService extends BaseFinancialService {
       product: createQuotationDto.items[index].product,
     }));
 
+    // Sanitize template field - convert empty strings to undefined
+    const template =
+      createQuotationDto.template && createQuotationDto.template.trim() !== ""
+        ? createQuotationDto.template
+        : undefined;
+
     const quotation = new this.quotationModel({
       ...createQuotationDto,
       ...financials,
       items: processedItems,
       whtRate,
       uniqueId,
+      template,
       account: account._id,
       createdBy: userId,
     });
-    return quotation.save();
+    const savedQuotation = await quotation.save();
+
+    // Log activity
+    await this.activityService.create({
+      type: ActivityType.QUOTATION_CREATED,
+      title: "Quotation created",
+      description: `Quotation ${savedQuotation.uniqueId} created for ${customer.fullName || customer.companyName || "customer"}`,
+      account: account._id,
+      user: userId as any,
+      entityId: savedQuotation._id,
+      entityType: "quotation",
+      metadata: {
+        quotationId: savedQuotation.uniqueId,
+        customerName: customer.fullName || customer.companyName,
+        amount: savedQuotation.grandTotal,
+      },
+    });
+
+    return savedQuotation;
   }
 
   async findAll(
@@ -124,12 +152,13 @@ export class QuotationsService extends BaseFinancialService {
         .limit(limit)
         .populate("createdBy", "firstName lastName email")
         .populate("customer", "companyName email phone billingAddress")
+        .populate("template", "imageUrl")
         .exec(),
       this.quotationModel.countDocuments(filter).exec(),
     ]);
 
     return {
-      data: quotations,
+      data: quotations as Quotation[],
       total,
     };
   }
@@ -185,7 +214,16 @@ export class QuotationsService extends BaseFinancialService {
       );
     }
 
-    let updateData: any = { ...updateQuotationDto };
+    // Sanitize template field - convert empty strings to null
+    const sanitizedDto = { ...updateQuotationDto };
+    if (sanitizedDto.template !== undefined) {
+      sanitizedDto.template =
+        sanitizedDto.template && sanitizedDto.template.trim() !== ""
+          ? sanitizedDto.template
+          : null;
+    }
+
+    let updateData: any = { ...sanitizedDto };
 
     if (updateQuotationDto.items) {
       // Recalculate financials with new items (including WHT)
@@ -258,6 +296,7 @@ export class QuotationsService extends BaseFinancialService {
     id: string,
     status: QuotationStatus,
     accountId: string,
+    userId?: string,
   ): Promise<Quotation> {
     const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
@@ -274,13 +313,64 @@ export class QuotationsService extends BaseFinancialService {
       updateData.rejectedDate = new Date();
     }
 
-    return this.quotationModel
+    const updatedQuotation = await this.quotationModel
       .findOneAndUpdate({ _id: id, account: account._id }, updateData, {
         new: true,
       })
       .populate("createdBy", "firstName lastName email")
       .populate("customer", "name email")
       .exec();
+
+    if (!updatedQuotation) {
+      throw new NotFoundException("Quotation not found");
+    }
+
+    // Log activity for status changes
+    if (status === QuotationStatus.SENT) {
+      await this.activityService.create({
+        type: ActivityType.QUOTATION_SENT,
+        title: "Quotation sent",
+        description: `Quotation ${updatedQuotation.uniqueId} was sent to customer`,
+        account: account._id,
+        user: userId as any,
+        entityId: updatedQuotation._id as any,
+        entityType: "quotation",
+        metadata: {
+          quotationId: updatedQuotation.uniqueId,
+          amount: updatedQuotation.grandTotal,
+        },
+      });
+    } else if (status === QuotationStatus.ACCEPTED) {
+      await this.activityService.create({
+        type: ActivityType.QUOTATION_ACCEPTED,
+        title: "Quotation accepted",
+        description: `Quotation ${updatedQuotation.uniqueId} was accepted`,
+        account: account._id,
+        user: userId as any,
+        entityId: updatedQuotation._id as any,
+        entityType: "quotation",
+        metadata: {
+          quotationId: updatedQuotation.uniqueId,
+          amount: updatedQuotation.grandTotal,
+        },
+      });
+    } else if (status === QuotationStatus.REJECTED) {
+      await this.activityService.create({
+        type: ActivityType.QUOTATION_DECLINED,
+        title: "Quotation declined",
+        description: `Quotation ${updatedQuotation.uniqueId} was declined`,
+        account: account._id,
+        user: userId as any,
+        entityId: updatedQuotation._id as any,
+        entityType: "quotation",
+        metadata: {
+          quotationId: updatedQuotation.uniqueId,
+          amount: updatedQuotation.grandTotal,
+        },
+      });
+    }
+
+    return updatedQuotation;
   }
 
   async getStats(account: string): Promise<any> {
@@ -407,7 +497,7 @@ export class QuotationsService extends BaseFinancialService {
       notes: quotation.notes,
       terms: quotation.terms,
       template: quotation.template,
-      templateId: quotation.templateId,
+      templateName: quotation.templateName,
       accentColor: quotation.accentColor,
       // Financial totals from quotation
       subtotal: quotation.subtotal,
@@ -417,12 +507,10 @@ export class QuotationsService extends BaseFinancialService {
       grandTotal: quotation.grandTotal,
       netReceivable: quotation.netReceivable,
       totalCost: quotation.totalCost,
-      expectedGrossProfit: quotation.expectedGrossProfit,
-      expectedNetProfit: quotation.expectedNetProfit,
-      expectedGrossProfitMargin: quotation.expectedGrossProfitMargin,
-      expectedNetProfitMargin: quotation.expectedNetProfitMargin,
-      expectedProfit: quotation.expectedProfit,
-      expectedProfitMargin: quotation.expectedProfitMargin,
+      totalGrossProfit: quotation.expectedGrossProfit || 0,
+      totalNetProfit: quotation.expectedNetProfit || 0,
+      grossProfitMargin: quotation.expectedGrossProfitMargin || 0,
+      netProfitMargin: quotation.expectedNetProfitMargin || 0,
       // Payment tracking
       amountPaid: 0,
       balanceDue: quotation.netReceivable || quotation.grandTotal,
@@ -444,6 +532,22 @@ export class QuotationsService extends BaseFinancialService {
       .populate("createdBy", "firstName lastName email")
       .populate("customer", "companyName email phone")
       .exec();
+
+    // Log activity for quotation conversion
+    await this.activityService.create({
+      type: ActivityType.QUOTATION_CONVERTED,
+      title: "Quotation converted to invoice",
+      description: `Quotation ${quotation.uniqueId} was converted to Invoice ${savedInvoice.uniqueId}`,
+      account: account._id,
+      user: userId as any,
+      entityId: quotation._id as any,
+      entityType: "quotation",
+      metadata: {
+        quotationId: quotation.uniqueId,
+        invoiceId: savedInvoice.uniqueId,
+        amount: savedInvoice.grandTotal,
+      },
+    });
 
     return {
       invoice: savedInvoice,

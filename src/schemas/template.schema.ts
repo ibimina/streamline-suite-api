@@ -23,6 +23,9 @@ export class Template {
   @Prop({ type: Types.ObjectId, ref: "Account" })
   account: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: "User", required: true })
+  createdBy: Types.ObjectId;
+
   @Prop({ required: true })
   publicId: string;
 

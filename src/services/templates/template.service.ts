@@ -4,29 +4,43 @@ import { Model } from "mongoose";
 import { Template, TemplateDocument } from "@/schemas/template.schema";
 import { randomUUID } from "crypto";
 import { Account, AccountDocument } from "@/schemas/account.schema";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 
 @Injectable()
 export class TemplateService {
+  private readonly logger = new Logger(TemplateService.name);
+
   constructor(
     private readonly cloudinaryService: CloudinaryService,
-    @InjectModel(Template.name) private readonly templateModel: Model<TemplateDocument>,
-    @InjectModel(Account.name) private readonly accountModel: Model<AccountDocument>
+    @InjectModel(Template.name)
+    private readonly templateModel: Model<TemplateDocument>,
+    @InjectModel(Account.name)
+    private readonly accountModel: Model<AccountDocument>,
   ) {}
-  async uploadTemplate(uploadFileDto: UploadFileDto, companyId: string) {
+  async uploadTemplate(uploadFileDto: UploadFileDto, accountId: string) {
     try {
-      const account = await this.accountModel.findById(companyId).exec();
+      this.logger.log(`Starting template upload for account: ${accountId}`);
+      this.logger.log(
+        `DTO received: name=${uploadFileDto.name}, hasFile=${!!uploadFileDto.file}`,
+      );
+
+      const account = await this.accountModel.findById(accountId).exec();
 
       if (!account) {
+        this.logger.error(`Account not found: ${accountId}`);
         throw new NotFoundException("Account not found");
       }
+
+      this.logger.log(`Account found, uploading to Cloudinary...`);
       const result = await this.cloudinaryService.uploadImage(uploadFileDto);
+      this.logger.log(`Cloudinary upload successful: ${result.secure_url}`);
 
       const { name, description } = uploadFileDto;
       const alphaNumeric = randomUUID();
       const uniqueId = `TEMP-${alphaNumeric}`;
 
+      this.logger.log(`Creating template in database...`);
       const template = await this.templateModel.create({
         imageUrl: result.secure_url,
         publicId: result.public_id,
@@ -35,18 +49,34 @@ export class TemplateService {
         description,
         account: account._id,
       });
+      this.logger.log(`Template created: ${template._id}`);
 
       await this.accountModel
         .findByIdAndUpdate(
           account._id,
           { $push: { templates: template._id } },
-          { new: true }
+          { new: true },
         )
         .exec();
 
-      return result;
+      return {
+        ...result,
+        template: {
+          _id: template._id,
+          uniqueId: template.uniqueId,
+          name: template.name,
+          description: template.description,
+          imageUrl: template.imageUrl,
+        },
+      };
     } catch (error) {
-      throw new Error(`Failed to upload template`);
+      const err = error as Error;
+      this.logger.error(`Failed to upload template: ${err.message}`);
+      this.logger.error(err.stack);
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new Error(`Failed to upload template: ${err.message}`);
     }
   }
 

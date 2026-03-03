@@ -15,15 +15,15 @@ import { Account, AccountDocument } from "@/schemas/account.schema";
 export class SupplierService {
   constructor(
     @InjectModel(Supplier.name) private supplierModel: Model<SupplierDocument>,
-    @InjectModel(Account.name) private companyModel: Model<AccountDocument>
+    @InjectModel(Account.name) private accountModel: Model<AccountDocument>
   ) {}
 
   async createSupplier(
     createSupplierDto: CreateSupplierDto,
-    companyId: string,
+    accountId: string,
     userId: string
   ): Promise<Supplier> {
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
@@ -31,7 +31,7 @@ export class SupplierService {
     // Check for duplicate supplier name within account
     const existingSupplier = await this.supplierModel.findOne({
       name: createSupplierDto.name,
-      companyId: account._id,
+      account: account._id,
     });
     if (existingSupplier) {
       throw new BadRequestException(
@@ -43,7 +43,7 @@ export class SupplierService {
     if (createSupplierDto.email) {
       const existingEmail = await this.supplierModel.findOne({
         email: createSupplierDto.email,
-        companyId: account._id,
+        accountId: account._id,
       });
       if (existingEmail) {
         throw new BadRequestException("Email already exists in your account");
@@ -52,7 +52,7 @@ export class SupplierService {
 
     const supplier = new this.supplierModel({
       ...createSupplierDto,
-      companyId,
+      account: account._id,
       createdBy: userId,
     });
 
@@ -60,13 +60,13 @@ export class SupplierService {
   }
 
   async findAllSuppliers(
-    companyId: string,
+    accountId: string,
     query: PaginationQuery
   ): Promise<{
     suppliers: Supplier[]
     total: number
   }> {
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
@@ -80,7 +80,7 @@ export class SupplierService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const filter: any = { companyId: account._id };
+    const filter: any = { account: account._id };
 
     if (search) {
       filter.$or = [
@@ -109,14 +109,14 @@ export class SupplierService {
     };
   }
 
-  async findSupplierById(id: string, companyId: string): Promise<Supplier> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async findSupplierById(id: string, accountId: string): Promise<Supplier> {
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const supplier = await this.supplierModel
-      .findOne({ _id: id, companyId: account._id })
+      .findOne({ _id: id, account: account._id })
       .populate("createdBy", "firstName lastName email")
       .exec();
 
@@ -130,9 +130,9 @@ export class SupplierService {
   async updateSupplier(
     id: string,
     updateSupplierDto: UpdateSupplierDto,
-    companyId: string
+    accountId: string
   ): Promise<Supplier> {
-    const account = await this.companyModel.findById(companyId).exec();
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
@@ -141,7 +141,7 @@ export class SupplierService {
     if (updateSupplierDto.name) {
       const existingSupplier = await this.supplierModel.findOne({
         name: updateSupplierDto.name,
-        companyId: account._id,
+        account: account._id,
         _id: { $ne: id }, // Exclude current supplier
       });
       if (existingSupplier) {
@@ -155,7 +155,7 @@ export class SupplierService {
     if (updateSupplierDto.email) {
       const existingEmail = await this.supplierModel.findOne({
         email: updateSupplierDto.email,
-        companyId: account._id,
+        account: account._id,
         _id: { $ne: id }, // Exclude current supplier
       });
       if (existingEmail) {
@@ -165,7 +165,7 @@ export class SupplierService {
 
     const supplier = await this.supplierModel
       .findOneAndUpdate(
-        { _id: id, companyId: account._id },
+        { _id: id, account: account._id },
         updateSupplierDto,
         { new: true }
       )
@@ -179,14 +179,14 @@ export class SupplierService {
     return supplier;
   }
 
-  async removeSupplier(id: string, companyId: string): Promise<void> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async removeSupplier(id: string, accountId: string): Promise<void> {
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const result = await this.supplierModel
-      .findOneAndDelete({ _id: id, companyId: account._id })
+      .findOneAndDelete({ _id: id, account: account._id })
       .exec();
 
     if (!result) {
@@ -194,16 +194,16 @@ export class SupplierService {
     }
   }
 
-  async getStats(companyId: string): Promise<any> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async getStats(accountId: string): Promise<any> {
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     const [totalSuppliers, activeSuppliers] = await Promise.all([
-      this.supplierModel.countDocuments({ companyId: account._id }),
+      this.supplierModel.countDocuments({ account: account._id }),
       this.supplierModel.countDocuments({
-        companyId: account._id,
+        account: account._id,
         isActive: true,
       }),
     ]);
@@ -215,15 +215,15 @@ export class SupplierService {
     };
   }
 
-  async getActiveSuppliers(companyId: string): Promise<Supplier[]> {
-    const account = await this.companyModel.findById(companyId).exec();
+  async getActiveSuppliers(accountId: string): Promise<Supplier[]> {
+    const account = await this.accountModel.findById(accountId).exec();
     if (!account) {
       throw new NotFoundException("Account not found");
     }
 
     return this.supplierModel
       .find({
-        companyId: account._id,
+        account: account._id,
         isActive: true,
       })
       .sort({ name: 1 })

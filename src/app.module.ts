@@ -33,6 +33,8 @@ import { ActivitySchema } from "./schemas/activity.schema";
 import { ExpenseSchema } from "./schemas/expense.schema";
 import { PayrollSchema } from "./schemas/payroll.schema";
 import { TaxReportSchema } from "./schemas/tax-report.schema";
+import { StaffSchema } from "./schemas/staff.schema";
+
 import { ActivityService } from "./services/activity/activity.service";
 import { ExpenseService } from "./services/expense/expense.service";
 import { PayrollService } from "./services/payroll/payroll.service";
@@ -82,6 +84,7 @@ import { CustomerService } from "./services/customer/customer.service";
       { name: "Expense", schema: ExpenseSchema },
       { name: "Payroll", schema: PayrollSchema },
       { name: "TaxReport", schema: TaxReportSchema },
+      {name:"Staff", schema: StaffSchema}
     ]),
     // Rate limiting
     ThrottlerModule.forRoot({

@@ -45,7 +45,7 @@ export class Account {
   registrationNumber?: string;
 
   // Financial Settings
-  @Prop({ default: "USD" })
+  @Prop({ default: "NGN" })
   currency: string;
 
   @Prop({ default: "01-01" })
@@ -62,27 +62,6 @@ export class Account {
 
   @Prop({ required: false,  })
     publicId?: string;
-  // Account settings
-  @Prop({
-    type: {
-      currency: { type: String, default: "USD" },
-      timezone: { type: String, default: "UTC" },
-      dateFormat: { type: String, default: "YYYY-MM-DD" },
-      language: { type: String, default: "en" },
-    },
-    default: {
-      currency: "USD",
-      timezone: "UTC",
-      dateFormat: "YYYY-MM-DD",
-      language: "en",
-    },
-  })
-  settings?: {
-    currency: string;
-    timezone: string;
-    dateFormat: string;
-    language: string;
-  };
 
   @Prop({ type: Types.ObjectId, ref: "User" })
   ownerId: Types.ObjectId;

@@ -12,8 +12,10 @@ export class CloudinaryConfigService {
 
   private configure() {
     try {
-      // Check if CLOUDINARY_URL is provided (format: cloudinary://api_key:api_secret@cloud_name)
       const cloudinaryUrl = this.configService.get<string>("CLOUDINARY_URL");
+              this.logger.log("Cloudinary Config Check:");
+        this.logger.log("Cloudinary Config Check:", cloudinaryUrl);
+
 
       if (cloudinaryUrl) {
         // If CLOUDINARY_URL is provided, use it directly
@@ -22,16 +24,22 @@ export class CloudinaryConfigService {
       } else {
         // Otherwise, use individual environment variables
         const cloudName = this.configService.get<string>(
-          "CLOUDINARY_CLOUD_NAME"
+          "CLOUDINARY_CLOUD_NAME",
         );
         const apiKey = this.configService.get<string>("CLOUDINARY_API_KEY");
         const apiSecret = this.configService.get<string>(
-          "CLOUDINARY_API_SECRET"
+          "CLOUDINARY_API_SECRET",
         );
+
+        // Debug logging to identify missing credentials
+        this.logger.log("Cloudinary Config Check:");
+        this.logger.log(`  Cloud Name: ${cloudName ? "✓ Set" : "✗ Missing"}`);
+        this.logger.log(`  API Key: ${apiKey ? "✓ Set" : "✗ Missing"}`);
+        this.logger.log(`  API Secret: ${apiSecret ? "✓ Set" : "✗ Missing"}`);
 
         if (!cloudName || !apiKey || !apiSecret) {
           this.logger.warn(
-            "Cloudinary configuration incomplete. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables, or provide CLOUDINARY_URL."
+            "Cloudinary configuration incomplete. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables, or provide CLOUDINARY_URL.",
           );
           return;
         }
@@ -41,19 +49,19 @@ export class CloudinaryConfigService {
           api_key: apiKey,
           api_secret: apiSecret,
           secure_distribution: this.configService.get<string>(
-            "CLOUDINARY_SECURE_DISTRIBUTION"
+            "CLOUDINARY_SECURE_DISTRIBUTION",
           ),
           upload_prefix: this.configService.get<string>(
-            "CLOUDINARY_UPLOAD_PREFIX"
+            "CLOUDINARY_UPLOAD_PREFIX",
           ),
         });
 
         this.logger.log(
-          "Cloudinary configured using individual environment variables"
+          "Cloudinary configured using individual environment variables",
         );
       }
     } catch (error) {
-      this.logger.error("Failed to configure Cloudinary:", error.message);
+      this.logger.error("Failed to configure Cloudinary:", error);
       this.logger.warn("Cloudinary features will be disabled");
     }
   }

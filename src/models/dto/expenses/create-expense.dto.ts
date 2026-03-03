@@ -8,13 +8,36 @@ import {
   IsArray,
   Min,
   IsMongoId,
+  ValidateNested,
 } from "class-validator";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   ExpenseCategory,
   PaymentMethod,
   RecurringFrequency,
 } from "@/schemas/expense.schema";
+
+export class ExpenseItemDto {
+  @ApiPropertyOptional({ description: "Product ID (optional)" })
+  @IsOptional()
+  @IsMongoId()
+  product?: string;
+
+  @ApiProperty({ description: "Item description" })
+  @IsString()
+  description: string;
+
+  @ApiProperty({ description: "Quantity", minimum: 1 })
+  @IsNumber()
+  @Min(1)
+  quantity: number;
+
+  @ApiProperty({ description: "Unit cost", minimum: 0 })
+  @IsNumber()
+  @Min(0)
+  unitCost: number;
+}
 
 export class CreateExpenseDto {
   @ApiProperty({ enum: ExpenseCategory, description: "Expense category" })
@@ -82,4 +105,14 @@ export class CreateExpenseDto {
   @IsOptional()
   @IsEnum(RecurringFrequency)
   recurringFrequency?: RecurringFrequency;
+
+  @ApiPropertyOptional({
+    description: "Product line items (optional, for stock purchase expenses)",
+    type: [ExpenseItemDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExpenseItemDto)
+  items?: ExpenseItemDto[];
 }

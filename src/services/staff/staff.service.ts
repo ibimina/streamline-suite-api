@@ -12,6 +12,8 @@ import { UpdateStaffDto } from "@/models/dto/staff/update-staff.dto";
 import { User, UserDocument } from "@/schemas/user.schema";
 import { PaginationQuery, PaginatedResponse } from "@/common/types";
 import { RoleName } from "@/models/enums/shared.enum";
+import { Staff, StaffDocument } from "@/schemas/staff.schema";
+import { Account, AccountDocument } from "@/schemas/account.schema";
 
 export interface StaffResponse {
   _id: string;
@@ -34,8 +36,10 @@ export interface StaffResponse {
 @Injectable()
 export class StaffService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel("Account") private accountModel: Model<any>
+    @InjectModel(Staff.name) private staffModel: Model<StaffDocument>,
+    @InjectModel(Account.name) private accountModel: Model<AccountDocument>,
+        @InjectModel(User.name) private userModel: Model<UserDocument>,
+
   ) {}
 
   /**
@@ -44,15 +48,15 @@ export class StaffService {
   async createStaff(
     createStaffDto: CreateStaffDto,
     creatorId: string,
-    accountId: string
+    accountId: string,
   ): Promise<StaffResponse> {
     // Check if user with email already exists
-    const existingUser = await this.userModel.findOne({
+    const existingStaff = await this.staffModel.findOne({
       email: createStaffDto.email,
     });
 
-    if (existingUser) {
-      throw new ConflictException("A user with this email already exists");
+    if (existingStaff) {
+      throw new ConflictException("A staff with this email already exists");
     }
 
     // Verify account exists
@@ -61,29 +65,25 @@ export class StaffService {
       throw new BadRequestException("Account does not exist");
     }
 
-    // Hash password
-    const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(
-      createStaffDto.password,
-      saltRounds
-    );
+    const user =  await this.userModel.findById(creatorId);
+    if (!user) {
+      throw new NotFoundException("User creating staff member not found");
+    }
 
     // Create staff user
-    const staff = new this.userModel({
+    const staff = new this.staffModel({
       ...createStaffDto,
-      password: hashedPassword,
-      account: new Types.ObjectId(accountId),
-      createdBy: new Types.ObjectId(creatorId),
+      account: account._id,
+      createdBy: user._id,
       role: createStaffDto.role || RoleName.Staff,
       isActive: createStaffDto.isActive ?? true,
       salary: createStaffDto.salary || 0,
-      hireDate: createStaffDto.hireDate ? new Date(createStaffDto.hireDate) : undefined,
+      hireDate: createStaffDto.hireDate
+        ? new Date(createStaffDto.hireDate)
+        : undefined,
     });
 
     await staff.save();
-
-    // Add staff to account's users array
-    await account.updateOne({ $push: { users: staff._id } });
 
     return this.toStaffResponse(staff);
   }
@@ -93,7 +93,7 @@ export class StaffService {
    */
   async findAllStaff(
     accountId: string,
-    query: PaginationQuery
+    query: PaginationQuery,
   ): Promise<PaginatedResponse<StaffResponse>> {
     const {
       page = 1,
@@ -105,9 +105,15 @@ export class StaffService {
 
     const skip = (page - 1) * limit;
 
+    const account = await this.accountModel.findById(accountId).exec();
+
+    if (!account) {
+      throw new NotFoundException("Account not found");
+    }
+
     // Build filter
     const filter: any = {
-      account: new Types.ObjectId(accountId),
+      account: account._id,
     };
 
     // Add search filter
@@ -124,18 +130,17 @@ export class StaffService {
 
     // Execute query
     const [staff, total] = await Promise.all([
-      this.userModel
+      this.staffModel
         .find(filter)
-        .select("-password -tokenVersion -lastGlobalLogout")
         .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      this.userModel.countDocuments(filter),
+      this.staffModel.countDocuments(filter),
     ]);
 
     return {
-      data: staff.map((s) => this.toStaffResponse(s)),
+      data: staff,
       total,
     };
   }
@@ -145,14 +150,13 @@ export class StaffService {
    */
   async findStaffById(
     staffId: string,
-    accountId: string
+    accountId: string,
   ): Promise<StaffResponse> {
-    const staff = await this.userModel
+    const staff = await this.staffModel
       .findOne({
         _id: new Types.ObjectId(staffId),
         account: new Types.ObjectId(accountId),
       })
-      .select("-password -tokenVersion -lastGlobalLogout")
       .lean();
 
     if (!staff) {
@@ -169,9 +173,9 @@ export class StaffService {
     staffId: string,
     updateStaffDto: UpdateStaffDto,
     accountId: string,
-    updaterId: string
+    updaterId: string,
   ): Promise<StaffResponse> {
-    const staff = await this.userModel.findOne({
+    const staff = await this.staffModel.findOne({
       _id: new Types.ObjectId(staffId),
       account: new Types.ObjectId(accountId),
     });
@@ -179,23 +183,13 @@ export class StaffService {
     if (!staff) {
       throw new NotFoundException("Staff member not found");
     }
-
+console.log(updateStaffDto, "updateStaffDto")
     // Update fields
     const updateData: any = {
       ...updateStaffDto,
       updatedBy: new Types.ObjectId(updaterId),
     };
-
-    // Handle password update separately
-    if (updateStaffDto.password) {
-      const saltRounds = 12;
-      updateData.password = await bcrypt.hash(
-        updateStaffDto.password,
-        saltRounds
-      );
-      updateData.passwordChangedAt = new Date();
-    }
-
+   
     // Handle date conversion
     if (updateStaffDto.hireDate) {
       updateData.hireDate = new Date(updateStaffDto.hireDate);
@@ -207,10 +201,9 @@ export class StaffService {
         delete updateData[key];
       }
     });
-
-    const updatedStaff = await this.userModel
+console.log(updateData)
+    const updatedStaff = await this.staffModel
       .findByIdAndUpdate(staffId, updateData, { new: true })
-      .select("-password -tokenVersion -lastGlobalLogout")
       .lean();
 
     return this.toStaffResponse(updatedStaff);
@@ -221,9 +214,9 @@ export class StaffService {
    */
   async deleteStaff(
     staffId: string,
-    accountId: string
+    accountId: string,
   ): Promise<{ message: string }> {
-    const staff = await this.userModel.findOne({
+    const staff = await this.staffModel.findOne({
       _id: new Types.ObjectId(staffId),
       account: new Types.ObjectId(accountId),
     });
@@ -235,14 +228,7 @@ export class StaffService {
     // Soft delete - set isActive to false
     await this.userModel.findByIdAndUpdate(staffId, {
       isActive: false,
-      tokenVersion: staff.tokenVersion + 1, // Invalidate existing tokens
     });
-
-    // Remove from account's users array
-    await this.accountModel.updateOne(
-      { _id: new Types.ObjectId(accountId) },
-      { $pull: { users: new Types.ObjectId(staffId) } }
-    );
 
     return { message: "Staff member deleted successfully" };
   }
@@ -252,9 +238,9 @@ export class StaffService {
    */
   async hardDeleteStaff(
     staffId: string,
-    accountId: string
+    accountId: string,
   ): Promise<{ message: string }> {
-    const staff = await this.userModel.findOne({
+    const staff = await this.staffModel.findOne({
       _id: new Types.ObjectId(staffId),
       account: new Types.ObjectId(accountId),
     });
@@ -264,13 +250,7 @@ export class StaffService {
     }
 
     // Hard delete
-    await this.userModel.findByIdAndDelete(staffId);
-
-    // Remove from account's users array
-    await this.accountModel.updateOne(
-      { _id: new Types.ObjectId(accountId) },
-      { $pull: { users: new Types.ObjectId(staffId) } }
-    );
+    await this.staffModel.findByIdAndDelete(staffId);
 
     return { message: "Staff member permanently deleted" };
   }
@@ -280,9 +260,9 @@ export class StaffService {
    */
   async toggleStaffStatus(
     staffId: string,
-    accountId: string
+    accountId: string,
   ): Promise<StaffResponse> {
-    const staff = await this.userModel.findOne({
+    const staff = await this.staffModel.findOne({
       _id: new Types.ObjectId(staffId),
       account: new Types.ObjectId(accountId),
     });
@@ -291,16 +271,14 @@ export class StaffService {
       throw new NotFoundException("Staff member not found");
     }
 
-    const updatedStaff = await this.userModel
+    const updatedStaff = await this.staffModel
       .findByIdAndUpdate(
         staffId,
         {
           isActive: !staff.isActive,
-          tokenVersion: staff.tokenVersion + 1, // Invalidate tokens if deactivating
         },
-        { new: true }
+        { new: true },
       )
-      .select("-password -tokenVersion -lastGlobalLogout")
       .lean();
 
     return this.toStaffResponse(updatedStaff);
@@ -311,15 +289,14 @@ export class StaffService {
    */
   async findStaffByDepartment(
     accountId: string,
-    department: string
+    department: string,
   ): Promise<StaffResponse[]> {
-    const staff = await this.userModel
+    const staff = await this.staffModel
       .find({
         account: new Types.ObjectId(accountId),
         department: { $regex: department, $options: "i" },
         isActive: true,
       })
-      .select("-password -tokenVersion -lastGlobalLogout")
       .lean();
 
     return staff.map((s) => this.toStaffResponse(s));
@@ -330,15 +307,14 @@ export class StaffService {
    */
   async findStaffByRole(
     accountId: string,
-    role: RoleName
+    role: RoleName,
   ): Promise<StaffResponse[]> {
-    const staff = await this.userModel
+    const staff = await this.staffModel
       .find({
         account: new Types.ObjectId(accountId),
         role,
         isActive: true,
       })
-      .select("-password -tokenVersion -lastGlobalLogout")
       .lean();
 
     return staff.map((s) => this.toStaffResponse(s));

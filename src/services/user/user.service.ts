@@ -10,18 +10,20 @@ import * as bcrypt from "bcrypt";
 import { UpdateUserDto } from "@/models/dto/users/update-user.dto";
 import { CreateUserDto } from "@/models/dto/users/user.dto";
 import { User, UserDocument } from "@/schemas/user.schema";
+import { AccountDocument } from "@/schemas/account.schema";
+import { PaginationQuery } from "@/common/types";
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel("Account") private companyModel: Model<any>
+    @InjectModel("Account") private accountModel: Model<AccountDocument>
   ) {}
 
   async registerUser(
     createUserDto: CreateUserDto,
     creatorId: string,
-    companyId: string
+    accountId: string
   ) {
     // Check if user already exists
     const existingUser = await this.userModel.findOne({
@@ -32,7 +34,7 @@ export class UserService {
       throw new ConflictException("User with this email already exists");
     }
     //check if account exists
-    const account = await this.companyModel.findById(companyId);
+    const account = await this.accountModel.findById(accountId);
     if (!account) {
       throw new BadRequestException("Account does not exist");
     }
@@ -48,7 +50,7 @@ export class UserService {
     const user = new this.userModel({
       ...createUserDto,
       password: hashedPassword,
-      companyId: companyId,
+      account: account._id,
       createdBy: creatorId,
     });
 
@@ -60,9 +62,9 @@ export class UserService {
   async updateUser(
     updateUserDto: UpdateUserDto,
     id: string,
-    companyId: string
+    accountId: string
   ) {
-    const user = await this.userModel.findOne({ _id: id, companyId });
+    const user = await this.userModel.findOne({ _id: id, account: accountId });
     if (!user) {
       throw new NotFoundException("User not found");
     }
@@ -72,5 +74,60 @@ export class UserService {
     user.isActive = updateUserDto.isActive;
 
     await user.save();
+  }
+
+ async findAllUsers(
+    accountId: string,
+    query: PaginationQuery,
+  ){
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      sortBy = "createdAt",
+      sortOrder = "desc",
+    } = query;
+
+    const skip = (page - 1) * limit;
+
+    const account = await this.accountModel.findById(accountId).exec();
+
+    if (!account) {
+      throw new NotFoundException("Account not found");
+    }
+
+    // Build filter
+    const filter: any = {
+      account: account._id,
+    };
+
+    // Add search filter
+    if (search) {
+      filter.$or = [
+        { firstName: { $regex: search, $options: "i" } },
+        { lastName: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { employeeId: { $regex: search, $options: "i" } },
+        { department: { $regex: search, $options: "i" } },
+        { position: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Execute query
+    const [users, total] = await Promise.all([
+      this.userModel
+        .find(filter)
+        .select("-password -tokenVersion -lastGlobalLogout")
+        .sort({ [sortBy]: sortOrder === "asc" ? 1 : -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      this.userModel.countDocuments(filter),
+    ]);
+
+    return {
+      data:users,
+      total,
+    };
   }
 }

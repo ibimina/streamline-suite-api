@@ -96,11 +96,11 @@ export class Invoice extends Document {
   @Prop()
   terms?: string;
 
-  @Prop()
+  @Prop({ type: Types.ObjectId, ref: "Template" })
   template?: string;
 
   @Prop()
-  templateId?: string;
+  templateName?: string;
 
   @Prop()
   accentColor?: string;
@@ -152,23 +152,16 @@ export class Invoice extends Document {
   totalCost: number;
 
   @Prop({ default: 0 })
-  expectedGrossProfit: number;
+  totalGrossProfit: number;
 
   @Prop({ default: 0 })
-  expectedNetProfit: number;
+  totalNetProfit: number;
 
   @Prop({ default: 0 })
-  expectedGrossProfitMargin: number;
+  grossProfitMargin: number;
 
   @Prop({ default: 0 })
-  expectedNetProfitMargin: number;
-
-  // Legacy fields for backwards compatibility
-  @Prop({ default: 0 })
-  expectedProfit: number;
-
-  @Prop({ default: 0 })
-  expectedProfitMargin: number;
+  netProfitMargin: number;
 
   @Prop({ type: Types.ObjectId, ref: "User", required: true })
   createdBy: Types.ObjectId;

@@ -48,7 +48,7 @@ export class ActivityService {
       userId?: string;
     },
   ): Promise<Activity[]> {
-    const query: any = { accountId: new Types.ObjectId(accountId) };
+    const query: any = { account: new Types.ObjectId(accountId) };
 
     if (filters?.type) query.type = filters.type;
     if (filters?.priority) query.priority = filters.priority;
@@ -93,7 +93,7 @@ export class ActivityService {
 
   async getUnreadCount(accountId: string, userId?: string): Promise<number> {
     const query: any = {
-      accountId: new Types.ObjectId(accountId),
+      account: new Types.ObjectId(accountId),
       isRead: false,
     };
 
@@ -108,19 +108,17 @@ export class ActivityService {
   }
 
   async getRecentActivities(
-    accountId: string,
+    accountId: ObjectId,
     limit: number = 10,
   ): Promise<{ text: string; time: string }[]> {
     const activities = await this.activityModel
-      .find({ accountId: new Types.ObjectId(accountId) })
+      .find({ account: accountId })
       .sort({ createdAt: -1 })
-      // .limit(limit)
+      .limit(limit)
       .select("title description createdAt type metadata user")
       .populate("user", "firstName lastName email")
       .lean()
       .exec();
-
-    console.log("Fetched Activities:", activities);
 
     return activities.map((activity) => ({
       text: this.formatActivityText(activity),
@@ -129,28 +127,51 @@ export class ActivityService {
   }
 
   private formatActivityText(activity: any): string {
-    const { title, description, type, user } = activity;
+    const { title, description, type, user, metadata } = activity;
+    const userName = user ? `${user.firstName} ${user.lastName}` : "System";
 
-    // Use metadata for richer formatting if available
-    // if (metadata?.customerName) {
-    //   return `${title} by ${user ? user.firstName + " " + user.lastName : "System"} for ${metadata.customerName}`;
-    // }
-
-    // if (metadata?.productName) {
-    //   return `${title}: ${metadata.productName}`;
-    // }
-
-    // if (metadata?.amount) {
-    //   return `${title} - $${metadata.amount.toLocaleString()}`;
-    // }
-    console.log(type, ActivityType.USER_LOGIN, user);
-    if (type === ActivityType.USER_LOGIN) {
-      return `${user ? user.firstName + " " + user.lastName : "A user"} logged in`;
+    switch (type) {
+      case ActivityType.USER_LOGIN:
+        return `${userName} logged in`;
+      case ActivityType.USER_LOGOUT:
+        return `${userName} logged out`;
+      case ActivityType.PASSWORD_CHANGE:
+        return `${userName} changed their password`;
+      case ActivityType.INVOICE_CREATED:
+        return `${userName} created Invoice ${metadata?.invoiceId || ""}`;
+      case ActivityType.INVOICE_SENT:
+        return `${userName} sent Invoice ${metadata?.invoiceId || ""}`;
+      case ActivityType.INVOICE_PAID:
+        return `${userName} marked Invoice ${metadata?.invoiceId || ""} as paid${metadata?.amount ? ` - $${metadata.amount.toLocaleString()}` : ""}`;
+      case ActivityType.INVOICE_OVERDUE:
+        return `Invoice ${metadata?.invoiceId || ""} is overdue`;
+      case ActivityType.QUOTATION_CREATED:
+        return `${userName} created Quotation ${metadata?.quotationId || ""}`;
+      case ActivityType.QUOTATION_SENT:
+        return `${userName} sent Quotation ${metadata?.quotationId || ""}`;
+      case ActivityType.QUOTATION_ACCEPTED:
+        return `${userName} accepted Quotation ${metadata?.quotationId || ""}`;
+      case ActivityType.QUOTATION_DECLINED:
+        return `${userName} declined Quotation ${metadata?.quotationId || ""}`;
+      case ActivityType.QUOTATION_CONVERTED:
+        return `${userName} converted Quotation ${metadata?.quotationId || ""} to Invoice ${metadata?.invoiceId || ""}`;
+      case ActivityType.PRODUCT_CREATED:
+        return `${userName} added product "${metadata?.productName || ""}"`;
+      case ActivityType.PRODUCT_UPDATED:
+        return `${userName} updated product "${metadata?.productName || ""}"`;
+      case ActivityType.PRODUCT_LOW_STOCK:
+        return `Low stock alert: "${metadata?.productName || ""}" (${metadata?.currentStock || 0} remaining)`;
+      case ActivityType.CUSTOMER_CREATED:
+        return `${userName} added customer "${metadata?.customerName || ""}"`;
+      case ActivityType.EXPENSE_CREATED:
+        return `${userName} recorded an expense${metadata?.amount ? ` - $${metadata.amount.toLocaleString()}` : ""}`;
+      case ActivityType.PAYMENT_RECEIVED:
+        return `${userName} recorded a payment${metadata?.amount ? ` of $${metadata.amount.toLocaleString()}` : ""}`;
+      case ActivityType.ACCOUNT_UPDATED:
+        return `${userName} updated account settings`;
+      default:
+        return title || description || "Activity recorded";
     }
-
-    return title;
-
-    // return title || description;
   }
 
   private getRelativeTime(date: Date): string {

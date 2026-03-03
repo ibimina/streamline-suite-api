@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
 
 export type ExpenseDocument = Expense & Document;
+export type ExpenseItemDocument = ExpenseItem & Document;
 
 export enum ExpenseCategory {
   RENT = "rent",
@@ -45,9 +46,29 @@ export enum RecurringFrequency {
 }
 
 @Schema({ timestamps: true })
+export class ExpenseItem {
+  @Prop({ type: Types.ObjectId, ref: "Product" })
+  product?: Types.ObjectId;
+
+  @Prop({ required: true })
+  description: string;
+
+  @Prop({ required: true })
+  quantity: number;
+
+  @Prop({ required: true })
+  unitCost: number;
+
+  @Prop({ default: 0 })
+  lineTotal: number; // quantity * unitCost
+}
+
+export const ExpenseItemSchema = SchemaFactory.createForClass(ExpenseItem);
+
+@Schema({ timestamps: true })
 export class Expense extends Document {
   @Prop({ type: Types.ObjectId, ref: "Account", required: true })
-  accountId: Types.ObjectId;
+  account: Types.ObjectId;
 
   @Prop({ unique: true })
   expenseNumber: string;
@@ -99,6 +120,9 @@ export class Expense extends Document {
 
   @Prop()
   approvedAt?: Date;
+
+  @Prop({ type: [ExpenseItemSchema], default: [] })
+  items: ExpenseItem[];
 
   @Prop({ type: Types.ObjectId, ref: "User", required: true })
   createdBy: Types.ObjectId;

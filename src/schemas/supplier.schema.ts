@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
-import { Document } from "mongoose";
+import { Document, Types } from "mongoose";
 
 export type SupplierDocument = Supplier & Document;
 
@@ -29,11 +29,11 @@ export class Supplier {
   @Prop({ default: true })
   isActive: boolean;
 
-  @Prop()
-  companyId: string;
+  @Prop({ type: Types.ObjectId, ref: "Account" })
+  account: Types.ObjectId;
 
-  @Prop()
-  createdBy: string;
+    @Prop({ type: Types.ObjectId, ref: "User" })
+  createdBy: Types.ObjectId;
 }
 
 export const SupplierSchema = SchemaFactory.createForClass(Supplier);

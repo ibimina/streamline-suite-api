@@ -143,9 +143,7 @@ export class CustomerPortalController {
     @Req() req: Request & { user: { accountId: string } },
   ) {
     try {
-      const payload = await this.accountService.getStats(
-        req.user.accountId.toString(),
-      );
+      const payload = await this.accountService.getStats(req.user.accountId);
       return {
         payload,
         message: "Dashboard stats retrieved successfully",
@@ -190,11 +188,11 @@ export class CustomerPortalController {
   @ApiOperation({ summary: "Upload account logo" })
   async uploadLogo(
     @Req() req: Request & { user: { id: string; accountId: string } },
-    @Body() uploadFileDto: UploadFileDto,
+    @Body() uploadLogoDto: { file: string },
   ) {
     try {
       const result = await this.accountService.uploadLogo(
-        uploadFileDto,
+        uploadLogoDto.file,
         req.user.accountId,
       );
       if (result) {
@@ -296,9 +294,33 @@ export class CustomerPortalController {
 
   @Get("invoices/stats")
   @ApiOperation({ summary: "Get invoice statistics" })
-  async getInvoiceStats(@Req() req: Request & { user: { accountId: string } }) {
+  @ApiQuery({
+    name: "startDate",
+    required: false,
+    description: "Filter start date (ISO string)",
+  })
+  @ApiQuery({
+    name: "endDate",
+    required: false,
+    description: "Filter end date (ISO string)",
+  })
+  @ApiQuery({
+    name: "customerId",
+    required: false,
+    description: "Filter by customer ID",
+  })
+  async getInvoiceStats(
+    @Req() req: Request & { user: { accountId: string } },
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+    @Query("customerId") customerId?: string,
+  ) {
     try {
-      const payload = await this.invoicesService.getStats(req.user.accountId);
+      const payload = await this.invoicesService.getStats(req.user.accountId, {
+        startDate,
+        endDate,
+        customerId,
+      });
       return {
         payload,
         message: "Invoice statistics fetched successfully",
@@ -427,10 +449,10 @@ export class CustomerPortalController {
   @ApiOperation({ summary: "Delete invoice" })
   async remove(
     @Param("id") id: string,
-    @Req() req: Request & { user: { accountId: string } },
+    @Req() req: Request & { user: { accountId: string; id: string } },
   ) {
     try {
-      await this.invoicesService.remove(id, req.user.accountId);
+      await this.invoicesService.remove(id, req.user.accountId, req.user.id);
       return {
         message: "Invoice deleted successfully",
         status: HttpStatus.OK,
@@ -1032,10 +1054,10 @@ export class CustomerPortalController {
   @ApiResponse({ status: 200, description: "Expense deleted successfully" })
   async removeExpense(
     @Param("id") id: string,
-    @Req() req: Request & { user: { accountId: string } },
+    @Req() req: Request & { user: { accountId: string; id: string } },
   ) {
     try {
-      await this.expenseService.remove(id, req.user.accountId);
+      await this.expenseService.remove(id, req.user.accountId, req.user.id);
       return {
         message: "Expense deleted successfully",
         status: HttpStatus.OK,
@@ -1480,9 +1502,10 @@ export class CustomerPortalController {
   })
   async findProductById(@Param("id") id: string, @Request() req) {
     try {
-      const payload = await this.productService.findOne(id, req.user.accountId);
+      const product = await this.productService.findOne(id, req.user.accountId);
+      console.log(product)
       return {
-        payload,
+        payload: product,
         message: "Product retrieved successfully",
         status: HttpStatus.OK,
       };
@@ -1940,15 +1963,58 @@ export class CustomerPortalController {
   @ApiOperation({ summary: "Register a new user" })
   @ApiResponse({ status: 201, description: "User registered successfully" })
   @ApiResponse({ status: 409, description: "User already exists" })
-  async register(
+  async createUser(
     @Body() createUserDto: CreateUserDto,
     @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
-    return this.userService.registerUser(
-      createUserDto,
-      req.user.id,
-      req.user.accountId,
-    );
+    try {
+      await this.userService.registerUser(
+        createUserDto,
+        req.user.id,
+        req.user.accountId,
+      );
+      return {
+        message: "User created successfully",
+        status: HttpStatus.CREATED,
+      };
+    } catch (error) {
+      console.error(
+        "Error occured in Customer Controller in - createUser",
+        JSON.stringify(error),
+      );
+      throw error;
+    }
+  }
+
+  @Get("users")
+  @ApiOperation({ summary: "findAllUsers" })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiQuery({ name: "search", required: false, type: String })
+  @ApiQuery({ name: "sortBy", required: false, type: String })
+  @ApiQuery({ name: "sortOrder", required: false, enum: ["asc", "desc"] })
+  @ApiResponse({ status: 200, description: "Users fetched successfully" })
+  async findAllUser(
+    @Req() req: Request & { user: { id: string; accountId: string } },
+    @Query() query: PaginationQuery,
+  ) {
+    try {
+      const users = await this.userService.findAllUsers(
+        req.user.accountId,
+        query,
+      );
+      return {
+        payload: users,
+        message: "User fetched successfully",
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        "Error occured in Customer Controller in - findAllUser",
+        JSON.stringify(error),
+      );
+      throw error;
+    }
   }
 
   @Post("user-update")
@@ -1959,11 +2025,23 @@ export class CustomerPortalController {
     @Body() updateUserDto: UpdateUserDto,
     @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
-    return this.userService.updateUser(
-      updateUserDto,
-      req.user.id,
-      req.user.accountId,
-    );
+    try {
+      await this.userService.updateUser(
+        updateUserDto,
+        req.user.id,
+        req.user.accountId,
+      );
+      return {
+        message: "User updated successfully",
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        "Error occured in Customer Controller in - updateUser",
+        JSON.stringify(error),
+      );
+      throw error;
+    }
   }
 
   @Post("staff")
@@ -1978,14 +2056,13 @@ export class CustomerPortalController {
   })
   async createStaff(
     @Body() createStaffDto: CreateStaffDto,
-    @GetUser("id") userId: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
       const staff = await this.staffService.createStaff(
         createStaffDto,
-        userId,
-        accountId,
+        req.user.id,
+        req.user.accountId,
       );
       return {
         payload: staff,
@@ -2013,7 +2090,7 @@ export class CustomerPortalController {
     description: "Staff list retrieved successfully",
   })
   async getAllStaff(
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
     @Query("page") page?: number,
     @Query("limit") limit?: number,
     @Query("search") search?: string,
@@ -2021,7 +2098,7 @@ export class CustomerPortalController {
     @Query("sortOrder") sortOrder?: "asc" | "desc",
   ) {
     try {
-      const result = await this.staffService.findAllStaff(accountId, {
+      const result = await this.staffService.findAllStaff(req.user.accountId, {
         page,
         limit,
         search,
@@ -2030,7 +2107,7 @@ export class CustomerPortalController {
       });
       return {
         payload: {
-          staff: result.data,
+          data: result.data,
           total: result.total,
           page: page || 1,
           limit: limit || 10,
@@ -2057,10 +2134,13 @@ export class CustomerPortalController {
   @ApiResponse({ status: 404, description: "Staff member not found" })
   async getStaffById(
     @Param("id") staffId: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
-      const staff = await this.staffService.findStaffById(staffId, accountId);
+      const staff = await this.staffService.findStaffById(
+        staffId,
+        req.user.accountId,
+      );
       return {
         payload: staff,
         message: "Staff member retrieved successfully",
@@ -2075,7 +2155,7 @@ export class CustomerPortalController {
     }
   }
 
-  @Put("staff/:id")
+  @Patch("staff/:id")
   @ApiOperation({ summary: "Update a staff member" })
   @ApiParam({ name: "id", description: "Staff member ID" })
   @ApiResponse({
@@ -2086,15 +2166,14 @@ export class CustomerPortalController {
   async updateStaff(
     @Param("id") staffId: string,
     @Body() updateStaffDto: UpdateStaffDto,
-    @GetUser("account") accountId: string,
-    @GetUser("id") userId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
       const staff = await this.staffService.updateStaff(
         staffId,
         updateStaffDto,
-        accountId,
-        userId,
+        req.user.accountId,
+        req.user.id,
       );
       return {
         payload: staff,
@@ -2120,12 +2199,12 @@ export class CustomerPortalController {
   @ApiResponse({ status: 404, description: "Staff member not found" })
   async toggleStaffStatus(
     @Param("id") staffId: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
       const staff = await this.staffService.toggleStaffStatus(
         staffId,
-        accountId,
+        req.user.accountId,
       );
       return {
         payload: staff,
@@ -2151,10 +2230,13 @@ export class CustomerPortalController {
   @ApiResponse({ status: 404, description: "Staff member not found" })
   async deleteStaff(
     @Param("id") staffId: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
-      const result = await this.staffService.deleteStaff(staffId, accountId);
+      const result = await this.staffService.deleteStaff(
+        staffId,
+        req.user.accountId,
+      );
       return {
         payload: result,
         message: result.message,
@@ -2176,12 +2258,12 @@ export class CustomerPortalController {
   @ApiResponse({ status: 404, description: "Staff member not found" })
   async hardDeleteStaff(
     @Param("id") staffId: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
       const result = await this.staffService.hardDeleteStaff(
         staffId,
-        accountId,
+        req.user.accountId,
       );
       return {
         payload: result,
@@ -2206,11 +2288,11 @@ export class CustomerPortalController {
   })
   async getStaffByDepartment(
     @Param("department") department: string,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
       const staff = await this.staffService.findStaffByDepartment(
-        accountId,
+        req.user.accountId,
         department,
       );
       return {
@@ -2236,10 +2318,13 @@ export class CustomerPortalController {
   })
   async getStaffByRole(
     @Param("role") role: RoleName,
-    @GetUser("account") accountId: string,
+    @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
-      const staff = await this.staffService.findStaffByRole(accountId, role);
+      const staff = await this.staffService.findStaffByRole(
+        req.user.accountId,
+        role,
+      );
       return {
         payload: { staff },
         message: "Staff list retrieved successfully",

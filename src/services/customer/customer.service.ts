@@ -6,11 +6,13 @@ import {
   Logger,
 } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import { CreateCustomerDto } from "@/models/dto/customer/create-customer.dto";
 import { Customer, CustomerDocument } from "@/schemas/customer.schema";
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { UpdateCustomerDto } from "@/models/dto/customer/update-customer.dto";
+import { ActivityService } from "../activity/activity.service";
+import { ActivityType } from "@/models/enums/shared.enum";
 
 interface PaginationOptions {
   page?: number;
@@ -26,12 +28,13 @@ export class CustomerService {
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(Account.name)
-    private readonly companyModel: Model<AccountDocument>
+    private readonly companyModel: Model<AccountDocument>,
+    private readonly activityService: ActivityService,
   ) {}
 
   async createCustomer(
     createDto: CreateCustomerDto,
-    companyId: string
+    companyId: string,
   ): Promise<CustomerDocument> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
@@ -45,7 +48,7 @@ export class CustomerService {
         .lean();
       if (exists) {
         throw new ConflictException(
-          "Customer with this email already exists for the account."
+          "Customer with this email already exists for the account.",
         );
       }
     }
@@ -55,13 +58,29 @@ export class CustomerService {
       email: createDto.email ? createDto.email.toLowerCase() : undefined,
     });
 
-    return created.save();
+    const savedCustomer = await created.save();
+
+    // Log activity
+    await this.activityService.create({
+      type: ActivityType.CUSTOMER_CREATED,
+      title: "Customer created",
+      description: `Customer ${savedCustomer.fullName || savedCustomer.companyName || "customer"} created`,
+      account: companyId as any,
+      entityId: savedCustomer._id,
+      entityType: "customer",
+      metadata: {
+        customerName: savedCustomer.fullName || savedCustomer.companyName,
+        email: savedCustomer.email,
+      },
+    });
+
+    return savedCustomer;
   }
 
   async getAllCompanyCustomers(
     filter: Partial<Customer> = {},
     options: PaginationOptions = {},
-    companyId: string
+    companyId: string,
   ): Promise<{
     customers: CustomerDocument[];
     total: number;
@@ -88,7 +107,7 @@ export class CustomerService {
 
   async getCustomerById(
     id: string,
-    companyId: string
+    companyId: string,
   ): Promise<CustomerDocument> {
     const account = await this.companyModel.findById(companyId).exec();
     if (!account) {
@@ -104,7 +123,7 @@ export class CustomerService {
 
   async update(
     id: string,
-    updateDto: UpdateCustomerDto
+    updateDto: UpdateCustomerDto,
   ): Promise<CustomerDocument> {
     const maybe = await this.customerModel.findById(id).exec();
     if (!maybe) {
@@ -123,7 +142,7 @@ export class CustomerService {
         .lean();
       if (conflict) {
         throw new ConflictException(
-          "Another customer with this email exists for the account."
+          "Another customer with this email exists for the account.",
         );
       }
       (updateDto as any).email = email;
@@ -135,7 +154,7 @@ export class CustomerService {
 
   async deactivateCompanyCustomer(
     companyId: string,
-    id: string
+    id: string,
   ): Promise<void> {
     const res = await this.customerModel.findByIdAndDelete(id).exec();
     if (!res) {

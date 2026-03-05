@@ -87,6 +87,11 @@ export class CreateExpenseDto {
   @IsString()
   receiptName?: string;
 
+  @ApiPropertyOptional({ description: "Receipt file as base64 string" })
+  @IsOptional()
+  @IsString()
+  receiptFile?: string;
+
   @ApiPropertyOptional({ description: "Additional notes" })
   @IsOptional()
   @IsString()

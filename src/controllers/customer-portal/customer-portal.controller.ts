@@ -1,4 +1,3 @@
-import { GetUser } from "@/common/decorators/get-user.decorator";
 import { Roles } from "@/common/decorators/roles.decorator";
 import { RolesGuard } from "@/common/guards/roles.guard";
 import { PaginationQuery, UserRole } from "@/common/types";
@@ -17,7 +16,6 @@ import {
 import { CreateSupplierDto } from "@/models/dto/supplier/create-supplier.dto";
 import { UpdateSupplierDto } from "@/models/dto/supplier/update-supplier.dto";
 import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
-import { User } from "@/schemas/user.schema";
 import { AccountService } from "@/services/account/account.service";
 import { AuthService } from "@/services/auth/auth.service";
 import { CustomerService } from "@/services/customer/customer.service";
@@ -843,42 +841,24 @@ export class CustomerPortalController {
 
   @Post("expenses")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(
-    FileInterceptor("receipt", {
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-      fileFilter: (req, file, cb) => {
-        if (
-          file.mimetype.match(
-            /^(image\/(jpeg|jpg|png|gif|webp)|application\/pdf)$/,
-          )
-        ) {
-          cb(null, true);
-        } else {
-          cb(new Error("Only image and PDF files are allowed!"), false);
-        }
-      },
-    }),
-  )
-  @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Create a new expense" })
   @ApiResponse({ status: 201, description: "Expense created successfully" })
   async createExpense(
     @Body() createExpenseDto: CreateExpenseDto,
-    @UploadedFile() receipt: Express.Multer.File,
     @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
-      // Upload receipt to Cloudinary if provided
-      if (receipt) {
-        const uploadResult: any = await this.cloudinaryService.uploadBuffer(
-          receipt.buffer,
-          {
-            folder: "streamline-suite/expenses",
-            resource_type: "auto",
-          },
-        );
+      // Upload receipt to Cloudinary if provided as base64
+      if (createExpenseDto.receiptFile) {
+        const uploadResult = await this.cloudinaryService.uploadImage({
+          file: createExpenseDto.receiptFile,
+          imagePath: `expenses/${req.user.accountId}`,
+          resourceType: "auto",
+          name: "expense-receipt",
+          description: "Expense receipt",
+        });
         createExpenseDto.receiptUrl = uploadResult.secure_url;
-        (createExpenseDto as any).receiptName = receipt.originalname;
+        delete createExpenseDto.receiptFile;
       }
 
       const payload = await this.expenseService.create(
@@ -1022,44 +1002,26 @@ export class CustomerPortalController {
 
   @Patch("expenses/:id")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(
-    FileInterceptor("receipt", {
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-      fileFilter: (req, file, cb) => {
-        if (
-          file.mimetype.match(
-            /^(image\/(jpeg|jpg|png|gif|webp)|application\/pdf)$/,
-          )
-        ) {
-          cb(null, true);
-        } else {
-          cb(new Error("Only image and PDF files are allowed!"), false);
-        }
-      },
-    }),
-  )
-  @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Update expense" })
   @ApiParam({ name: "id", description: "Expense ID" })
   @ApiResponse({ status: 200, description: "Expense updated successfully" })
   async updateExpense(
     @Param("id") id: string,
     @Body() updateExpenseDto: UpdateExpenseDto,
-    @UploadedFile() receipt: Express.Multer.File,
     @Req() req: Request & { user: { accountId: string } },
   ) {
     try {
-      // Upload new receipt to Cloudinary if provided
-      if (receipt) {
-        const uploadResult: any = await this.cloudinaryService.uploadBuffer(
-          receipt.buffer,
-          {
-            folder: "streamline-suite/expenses",
-            resource_type: "auto",
-          },
-        );
+      // Upload new receipt to Cloudinary if provided as base64
+      if (updateExpenseDto.receiptFile) {
+        const uploadResult = await this.cloudinaryService.uploadImage({
+          file: updateExpenseDto.receiptFile,
+          imagePath: `expenses/${req.user.accountId}`,
+          resourceType: "auto",
+          name: "expense-receipt",
+          description: "Expense receipt",
+        });
         updateExpenseDto.receiptUrl = uploadResult.secure_url;
-        (updateExpenseDto as any).receiptName = receipt.originalname;
+        delete updateExpenseDto.receiptFile;
       }
 
       const payload = await this.expenseService.update(

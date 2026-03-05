@@ -82,6 +82,11 @@ export class CreateExpenseDto {
   @IsString()
   receiptUrl?: string;
 
+  @ApiPropertyOptional({ description: "Receipt file name" })
+  @IsOptional()
+  @IsString()
+  receiptName?: string;
+
   @ApiPropertyOptional({ description: "Additional notes" })
   @IsOptional()
   @IsString()

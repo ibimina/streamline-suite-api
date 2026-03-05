@@ -25,6 +25,7 @@ import { InvoicesService } from "@/services/invoice/invoices.service";
 import { QuotationsService } from "@/services/quotation/quotations.service";
 import { SupplierService } from "@/services/supplier/supplier.service";
 import { ProductService } from "@/services/product/product.service";
+import { CloudinaryService } from "@/services/cloudinary/cloudinary.service";
 import {
   Body,
   Controller,
@@ -40,13 +41,17 @@ import {
   Req,
   UseGuards,
   Request,
+  UseInterceptors,
+  UploadedFile,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiConsumes,
 } from "@nestjs/swagger";
 import { ObjectId } from "mongoose";
 import { CreateProductDto } from "@/models/dto/product/create-product.dto";
@@ -106,6 +111,7 @@ export class CustomerPortalController {
     private readonly payrollService: PayrollService,
     private readonly taxService: TaxService,
     private readonly analyticsService: AnalyticsService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   @Post("logout")
@@ -837,13 +843,44 @@ export class CustomerPortalController {
 
   @Post("expenses")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @UseInterceptors(
+    FileInterceptor("receipt", {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+      fileFilter: (req, file, cb) => {
+        if (
+          file.mimetype.match(
+            /^(image\/(jpeg|jpg|png|gif|webp)|application\/pdf)$/,
+          )
+        ) {
+          cb(null, true);
+        } else {
+          cb(new Error("Only image and PDF files are allowed!"), false);
+        }
+      },
+    }),
+  )
+  @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Create a new expense" })
   @ApiResponse({ status: 201, description: "Expense created successfully" })
   async createExpense(
     @Body() createExpenseDto: CreateExpenseDto,
+    @UploadedFile() receipt: Express.Multer.File,
     @Req() req: Request & { user: { id: string; accountId: string } },
   ) {
     try {
+      // Upload receipt to Cloudinary if provided
+      if (receipt) {
+        const uploadResult: any = await this.cloudinaryService.uploadBuffer(
+          receipt.buffer,
+          {
+            folder: "streamline-suite/expenses",
+            resource_type: "auto",
+          },
+        );
+        createExpenseDto.receiptUrl = uploadResult.secure_url;
+        (createExpenseDto as any).receiptName = receipt.originalname;
+      }
+
       const payload = await this.expenseService.create(
         createExpenseDto,
         req.user.accountId,
@@ -985,15 +1022,46 @@ export class CustomerPortalController {
 
   @Patch("expenses/:id")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @UseInterceptors(
+    FileInterceptor("receipt", {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+      fileFilter: (req, file, cb) => {
+        if (
+          file.mimetype.match(
+            /^(image\/(jpeg|jpg|png|gif|webp)|application\/pdf)$/,
+          )
+        ) {
+          cb(null, true);
+        } else {
+          cb(new Error("Only image and PDF files are allowed!"), false);
+        }
+      },
+    }),
+  )
+  @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Update expense" })
   @ApiParam({ name: "id", description: "Expense ID" })
   @ApiResponse({ status: 200, description: "Expense updated successfully" })
   async updateExpense(
     @Param("id") id: string,
     @Body() updateExpenseDto: UpdateExpenseDto,
+    @UploadedFile() receipt: Express.Multer.File,
     @Req() req: Request & { user: { accountId: string } },
   ) {
     try {
+      // Upload new receipt to Cloudinary if provided
+      if (receipt) {
+        const uploadResult: any = await this.cloudinaryService.uploadBuffer(
+          receipt.buffer,
+          {
+            folder: "streamline-suite/expenses",
+            resource_type: "auto",
+          },
+        );
+        updateExpenseDto.receiptUrl = uploadResult.secure_url;
+        (updateExpenseDto as any).receiptName = receipt.originalname;
+      }
+
       const payload = await this.expenseService.update(
         id,
         updateExpenseDto,
@@ -1503,7 +1571,7 @@ export class CustomerPortalController {
   async findProductById(@Param("id") id: string, @Request() req) {
     try {
       const product = await this.productService.findOne(id, req.user.accountId);
-      console.log(product)
+      console.log(product);
       return {
         payload: product,
         message: "Product retrieved successfully",

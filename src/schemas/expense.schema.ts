@@ -100,6 +100,9 @@ export class Expense extends Document {
   @Prop()
   receiptUrl?: string;
 
+  @Prop()
+  receiptName?: string;
+
   @Prop({ enum: ExpenseStatus, default: ExpenseStatus.PENDING })
   status: ExpenseStatus;
 

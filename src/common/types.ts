@@ -23,6 +23,11 @@ export enum UserRole {
   ADMIN = "Admin",
   MANAGER = "Manager",
   STAFF = "Staff",
+  ACCOUNTANT = "Accountant",
+  SALE = "Sale",
+  PROCUREMENT = "Procurement",
+  WAREHOUSE = "Warehouse",
+  BUSINESS_OWNER = "BusinessOwner",
 }
 
 export enum InvoiceStatus {
@@ -55,7 +60,6 @@ export interface ItemDetails {
   description: string;
   quantity: number;
   unitPrice: number;
-
 }
 
 export interface QuotationItemDetails {
@@ -67,7 +71,6 @@ export interface QuotationItemDetails {
 }
 
 export enum InventoryTransactionStatus {
-
   PURCHASE = "purchase", // Goods received
   SALE = "sale", // Goods sold
   RETURN_FROM_CUSTOMER = "return_from_customer",
@@ -75,7 +78,7 @@ export enum InventoryTransactionStatus {
   ADJUSTMENT = "adjustment", // Damage, theft, correction
   TRANSFER = "transfer", // Future: warehouse to warehouse
   PRODUCTION_IN = "production_in", // Future: manufacturing
-  PRODUCTION_OUT = "production_out", 
+  PRODUCTION_OUT = "production_out",
   COMPLETED = "completed",
 }
 

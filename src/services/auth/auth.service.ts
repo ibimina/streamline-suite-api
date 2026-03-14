@@ -180,6 +180,8 @@ export class AuthService {
       role: user.role,
       accountId: user.account.toString(),
       tokenVersion: user.tokenVersion, // Include token version for invalidation
+      permissionMode: user.permissionMode || "inherit",
+      permissions: user.permissions as any, // Include custom permissions if set
     };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: "15m" }),

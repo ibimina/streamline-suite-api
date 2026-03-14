@@ -10,7 +10,16 @@ import { UploadFileDto } from "@/models/dto/upload-file/upload-file.dto";
 @ApiTags("upload")
 @Controller("upload")
 @UseGuards(RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.MANAGER)
+@Roles(
+  UserRole.ADMIN,
+  UserRole.MANAGER,
+  UserRole.STAFF,
+  UserRole.ACCOUNTANT,
+  UserRole.SALE,
+  UserRole.PROCUREMENT,
+  UserRole.WAREHOUSE,
+  UserRole.BUSINESS_OWNER,
+)
 export class CloudinaryController {
   constructor(private readonly cloudinaryService: CloudinaryService) {}
   @Post("file")

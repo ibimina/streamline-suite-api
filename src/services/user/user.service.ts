@@ -17,13 +17,13 @@ import { PaginationQuery } from "@/common/types";
 export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel("Account") private accountModel: Model<AccountDocument>
+    @InjectModel("Account") private accountModel: Model<AccountDocument>,
   ) {}
 
   async registerUser(
     createUserDto: CreateUserDto,
     creatorId: string,
-    accountId: string
+    accountId: string,
   ) {
     // Check if user already exists
     const existingUser = await this.userModel.findOne({
@@ -43,7 +43,7 @@ export class UserService {
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(
       createUserDto.password,
-      saltRounds
+      saltRounds,
     );
 
     // Create user
@@ -52,6 +52,11 @@ export class UserService {
       password: hashedPassword,
       account: account._id,
       createdBy: creatorId,
+      permissionMode: createUserDto.permissionMode || "inherit",
+      permissions:
+        createUserDto.permissionMode === "custom"
+          ? createUserDto.permissions
+          : [],
     });
 
     await user.save();
@@ -62,7 +67,7 @@ export class UserService {
   async updateUser(
     updateUserDto: UpdateUserDto,
     id: string,
-    accountId: string
+    accountId: string,
   ) {
     const user = await this.userModel.findOne({ _id: id, account: accountId });
     if (!user) {
@@ -72,14 +77,27 @@ export class UserService {
     // Update user fields
     user.role = updateUserDto.role;
     user.isActive = updateUserDto.isActive;
+    if (updateUserDto.phone !== undefined) {
+      user.phone = updateUserDto.phone;
+    }
+
+    // Update permission mode and custom permissions if provided
+    if (updateUserDto.permissionMode !== undefined) {
+      user.permissionMode = updateUserDto.permissionMode;
+    }
+    if (
+      updateUserDto.permissionMode === "custom" &&
+      updateUserDto.permissions
+    ) {
+      user.permissions = updateUserDto.permissions;
+    } else if (updateUserDto.permissionMode === "inherit") {
+      user.permissions = [];
+    }
 
     await user.save();
   }
 
- async findAllUsers(
-    accountId: string,
-    query: PaginationQuery,
-  ){
+  async findAllUsers(accountId: string, query: PaginationQuery) {
     const {
       page = 1,
       limit = 10,
@@ -126,7 +144,7 @@ export class UserService {
     ]);
 
     return {
-      data:users,
+      data: users,
       total,
     };
   }

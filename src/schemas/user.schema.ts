@@ -1,6 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { Document, Types } from "mongoose";
-import { UserRole } from "@/common/types";
 import { PermissionName, RoleName } from "@/models/enums/shared.enum";
 
 export type UserDocument = User & Document;
@@ -26,7 +25,7 @@ export class User {
 
   @Prop({
     type: String,
-    enum:RoleName,
+    enum: RoleName,
     default: "Staff",
   })
   role: string;
@@ -72,6 +71,9 @@ export class User {
 
   @Prop({ type: Types.ObjectId, ref: "User" })
   createdBy?: Types.ObjectId;
+
+  @Prop({ type: String, enum: ["inherit", "custom"], default: "inherit" })
+  permissionMode: "inherit" | "custom";
 
   @Prop({ type: [String], default: [], enum: PermissionName })
   permissions?: string[];

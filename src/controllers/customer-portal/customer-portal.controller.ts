@@ -1,5 +1,7 @@
 import { Roles } from "@/common/decorators/roles.decorator";
+import { Permissions } from "@/common/decorators/permissions.decorator";
 import { RolesGuard } from "@/common/guards/roles.guard";
+import { PermissionsGuard } from "@/common/guards/permissions.guard";
 import { PaginationQuery, UserRole } from "@/common/types";
 import { UpdateAccountDto } from "@/models/dto/account/update-account.dto";
 import { CreateCustomerDto } from "@/models/dto/customer/create-customer.dto";
@@ -78,7 +80,7 @@ import {
   FileTaxReportDto,
   PayTaxReportDto,
 } from "@/models/dto/tax";
-import { RoleName } from "@/models/enums/shared.enum";
+import { RoleName, PermissionName } from "@/models/enums/shared.enum";
 import { StaffService } from "@/services/staff/staff.service";
 import { ExpenseService } from "@/services/expense/expense.service";
 import { PayrollService } from "@/services/payroll/payroll.service";
@@ -91,7 +93,16 @@ import { TaxReportType, TaxReportStatus } from "@/schemas/tax-report.schema";
 @ApiTags("customer-portal")
 @Controller("customer-portal")
 @UseGuards(RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.MANAGER)
+@Roles(
+  UserRole.ADMIN,
+  UserRole.MANAGER,
+  UserRole.STAFF,
+  UserRole.ACCOUNTANT,
+  UserRole.SALE,
+  UserRole.PROCUREMENT,
+  UserRole.WAREHOUSE,
+  UserRole.BUSINESS_OWNER,
+)
 export class CustomerPortalController {
   constructor(
     private readonly accountService: AccountService,
@@ -243,6 +254,8 @@ export class CustomerPortalController {
   }
 
   @Post("invoices")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_INVOICES)
   @ApiOperation({ summary: "Create a new invoice" })
   async create(
     @Body() createInvoiceDto: CreateInvoiceDto,
@@ -269,6 +282,8 @@ export class CustomerPortalController {
   }
 
   @Get("invoices")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVOICES)
   @ApiOperation({ summary: "Get all invoices with pagination" })
   async findAllInvoice(
     @Query() query: PaginationQuery,
@@ -472,6 +487,8 @@ export class CustomerPortalController {
 
   // Create a new customer
   @Post("customer")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_CUSTOMERS)
   async createClient(
     @Body() dto: CreateCustomerDto,
     @Req() req: Request & { user: { id: string; accountId: string } },
@@ -493,6 +510,8 @@ export class CustomerPortalController {
 
   // Get all customers for a account (with simple pagination)
   @Get("customers")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_CUSTOMERS)
   @HttpCode(HttpStatus.OK)
   async getAllCompanyCustomers(
     @Query("page") page = "1",
@@ -526,6 +545,8 @@ export class CustomerPortalController {
 
   // Get a single customer by id
   @Get("customers/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_CUSTOMERS)
   @HttpCode(HttpStatus.OK)
   async get(
     @Param("id") id: string,
@@ -551,6 +572,8 @@ export class CustomerPortalController {
   }
 
   @Patch("customers/:id/deactivate")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_CUSTOMERS)
   @HttpCode(HttpStatus.OK)
   async deactivate(
     @Req() req: Request & { user: { id: string; accountId: string } },
@@ -578,6 +601,8 @@ export class CustomerPortalController {
 
   // Delete a account customer (hard delete)
   @Delete("customers/:customerId")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_CUSTOMERS)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCompanyCustomer(
     @Req() req: Request & { user: { id: string; accountId: string } },
@@ -602,6 +627,8 @@ export class CustomerPortalController {
   }
 
   @Post("quotations")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_QUOTATIONS)
   @ApiOperation({ summary: "Create a new quotation" })
   async createQuotation(
     @Body() createQuotationDto: CreateQuotationDto,
@@ -629,6 +656,8 @@ export class CustomerPortalController {
   }
 
   @Get("quotations")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_QUOTATIONS)
   @ApiOperation({ summary: "Get all quotations with pagination" })
   @ApiQuery({ name: "page", required: false, description: "Page number" })
   @ApiQuery({ name: "limit", required: false, description: "Items per page" })
@@ -663,6 +692,8 @@ export class CustomerPortalController {
   }
 
   @Get("quotations/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_QUOTATIONS)
   @ApiOperation({ summary: "Get quotation statistics" })
   @ApiResponse({
     status: 200,
@@ -690,6 +721,8 @@ export class CustomerPortalController {
   }
 
   @Get("quotations/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_QUOTATIONS)
   @ApiOperation({ summary: "Get quotation by ID" })
   @ApiParam({ name: "id", description: "Quotation ID" })
   @ApiResponse({ status: 200, description: "Quotation retrieved successfully" })
@@ -718,6 +751,8 @@ export class CustomerPortalController {
   }
 
   @Patch("quotations/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_QUOTATIONS)
   @ApiOperation({ summary: "Update quotation" })
   @ApiParam({ name: "id", description: "Quotation ID" })
   @ApiResponse({ status: 200, description: "Quotation updated successfully" })
@@ -747,6 +782,8 @@ export class CustomerPortalController {
   }
 
   @Patch("quotations/:id/status")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_QUOTATIONS)
   @ApiOperation({ summary: "Update quotation status" })
   @ApiParam({ name: "id", description: "Quotation ID" })
   @ApiResponse({
@@ -778,6 +815,8 @@ export class CustomerPortalController {
   }
 
   @Post("quotations/:id/convert-to-invoice")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_QUOTATIONS, PermissionName.CREATE_INVOICES)
   @ApiOperation({ summary: "Convert quotation to invoice" })
   @ApiParam({ name: "id", description: "Quotation ID" })
   @ApiResponse({
@@ -814,6 +853,8 @@ export class CustomerPortalController {
   }
 
   @Delete("quotations/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.CREATE_QUOTATIONS)
   @ApiOperation({ summary: "Delete quotation" })
   @ApiParam({ name: "id", description: "Quotation ID" })
   @ApiResponse({ status: 200, description: "Quotation deleted successfully" })
@@ -840,6 +881,8 @@ export class CustomerPortalController {
   // ============ EXPENSES ============
 
   @Post("expenses")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.SUBMIT_EXPENSES)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Create a new expense" })
   @ApiResponse({ status: 201, description: "Expense created successfully" })
@@ -881,6 +924,8 @@ export class CustomerPortalController {
   }
 
   @Get("expenses")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_EXPENSES)
   @ApiOperation({ summary: "Get all expenses with pagination" })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
@@ -924,6 +969,8 @@ export class CustomerPortalController {
   }
 
   @Get("expenses/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_EXPENSES)
   @ApiOperation({ summary: "Get expense statistics" })
   @ApiResponse({
     status: 200,
@@ -1102,6 +1149,8 @@ export class CustomerPortalController {
   }
 
   @Post("suppliers")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Create a new supplier" })
   @ApiResponse({
@@ -1141,6 +1190,8 @@ export class CustomerPortalController {
   }
 
   @Get("suppliers")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_SUPPLIERS)
   @ApiOperation({ summary: "Get all suppliers with pagination and search" })
   @ApiQuery({
     name: "page",
@@ -1197,6 +1248,8 @@ export class CustomerPortalController {
   }
 
   @Get("supplier/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Get supplier statistics" })
   @ApiResponse({
@@ -1225,6 +1278,8 @@ export class CustomerPortalController {
   }
 
   @Get("suppliers/active")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get all active suppliers" })
   @ApiResponse({
@@ -1255,6 +1310,8 @@ export class CustomerPortalController {
   }
 
   @Get("suppliers/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get a supplier by ID" })
   @ApiParam({
@@ -1291,6 +1348,8 @@ export class CustomerPortalController {
   }
 
   @Patch("suppliers/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Update a supplier" })
   @ApiParam({
@@ -1336,6 +1395,8 @@ export class CustomerPortalController {
   }
 
   @Delete("suppliers/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_SUPPLIERS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Delete a supplier" })
   @ApiResponse({
@@ -1363,6 +1424,8 @@ export class CustomerPortalController {
   }
 
   @Post("products")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_PRODUCTS)
   @ApiOperation({ summary: "Create a new product" })
   @ApiResponse({
     status: 201,
@@ -1401,6 +1464,8 @@ export class CustomerPortalController {
   }
 
   @Get("products")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_PRODUCTS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get all products with pagination and search" })
   @ApiQuery({
@@ -1458,6 +1523,8 @@ export class CustomerPortalController {
   }
 
   @Get("products/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_PRODUCTS)
   @ApiOperation({ summary: "Get product statistics" })
   @ApiResponse({
     status: 200,
@@ -1485,6 +1552,8 @@ export class CustomerPortalController {
   }
 
   @Get("products/low-stock")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Get products with low stock" })
   @ApiResponse({
@@ -1515,6 +1584,8 @@ export class CustomerPortalController {
   }
 
   @Get("products/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_PRODUCTS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get a product by ID" })
   @ApiParam({
@@ -1549,6 +1620,8 @@ export class CustomerPortalController {
   }
 
   @Patch("products/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_PRODUCTS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Update a product" })
   @ApiParam({
@@ -1594,6 +1667,8 @@ export class CustomerPortalController {
   }
 
   @Delete("products/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_PRODUCTS)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Delete a product" })
   @ApiParam({
@@ -1626,6 +1701,8 @@ export class CustomerPortalController {
   }
 
   @Post("inventory-transactions")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Create a new inventory transaction" })
   @ApiResponse({
@@ -1666,6 +1743,8 @@ export class CustomerPortalController {
   }
 
   @Get("inventory-transactions")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({
     summary: "Get all inventory transactions with pagination and filters",
@@ -1757,6 +1836,8 @@ export class CustomerPortalController {
   }
 
   @Get("inventory-transactions/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Get inventory transaction statistics" })
   @ApiResponse({
@@ -1774,6 +1855,8 @@ export class CustomerPortalController {
   }
 
   @Get("inventory-transactions/product/:productId/history")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get transaction history for a specific product" })
   @ApiParam({
@@ -1800,6 +1883,8 @@ export class CustomerPortalController {
   }
 
   @Get("inventory-transactions/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.STAFF)
   @ApiOperation({ summary: "Get an inventory transaction by ID" })
   @ApiParam({
@@ -1837,6 +1922,8 @@ export class CustomerPortalController {
   }
 
   @Patch("inventory-transactions/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Update an inventory transaction" })
   @ApiParam({
@@ -1883,6 +1970,8 @@ export class CustomerPortalController {
   }
 
   @Delete("inventory-transactions/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_INVENTORY)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Delete an inventory transaction" })
   @ApiParam({
@@ -1989,7 +2078,9 @@ export class CustomerPortalController {
     }
   }
 
-  @Post("user-register")
+  @Post("users")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_USERS)
   @ApiOperation({ summary: "Register a new user" })
   @ApiResponse({ status: 201, description: "User registered successfully" })
   @ApiResponse({ status: 409, description: "User already exists" })
@@ -2017,6 +2108,8 @@ export class CustomerPortalController {
   }
 
   @Get("users")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_USERS)
   @ApiOperation({ summary: "findAllUsers" })
   @ApiQuery({ name: "page", required: false, type: Number })
   @ApiQuery({ name: "limit", required: false, type: Number })
@@ -2047,7 +2140,9 @@ export class CustomerPortalController {
     }
   }
 
-  @Post("user-update")
+  @Patch("users")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_USERS)
   @ApiOperation({ summary: "Update user information" })
   @ApiResponse({ status: 200, description: "User updated successfully" })
   @ApiResponse({ status: 404, description: "User not found" })
@@ -2372,6 +2467,8 @@ export class CustomerPortalController {
   // ============ PAYROLL ============
 
   @Post("payroll")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_PAYROLL)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Create a new payroll" })
   @ApiResponse({ status: 201, description: "Payroll created successfully" })
@@ -2400,6 +2497,8 @@ export class CustomerPortalController {
   }
 
   @Get("payroll")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_PAYROLL)
   @ApiOperation({ summary: "Get all payrolls with pagination" })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
@@ -2437,6 +2536,8 @@ export class CustomerPortalController {
   }
 
   @Get("payroll/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_PAYROLL)
   @ApiOperation({ summary: "Get payroll statistics" })
   @ApiResponse({
     status: 200,
@@ -2605,6 +2706,8 @@ export class CustomerPortalController {
   // ============ TAXES ============
 
   @Post("taxes/generate")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_TAXES)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Generate a tax report" })
   @ApiResponse({
@@ -2636,6 +2739,8 @@ export class CustomerPortalController {
   }
 
   @Get("taxes")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_TAXES)
   @ApiOperation({ summary: "Get all tax reports with pagination" })
   @ApiQuery({ name: "page", required: false })
   @ApiQuery({ name: "limit", required: false })
@@ -2670,6 +2775,8 @@ export class CustomerPortalController {
   }
 
   @Get("taxes/stats")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_TAXES)
   @ApiOperation({ summary: "Get tax statistics" })
   @ApiResponse({ status: 200, description: "Tax stats retrieved successfully" })
   async getTaxStats(@Req() req: Request & { user: { accountId: string } }) {
@@ -2690,6 +2797,8 @@ export class CustomerPortalController {
   }
 
   @Get("taxes/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.VIEW_TAXES)
   @ApiOperation({ summary: "Get tax report by ID" })
   @ApiParam({ name: "id", description: "Tax report ID" })
   @ApiResponse({
@@ -2715,6 +2824,8 @@ export class CustomerPortalController {
   }
 
   @Patch("taxes/:id/file")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_TAXES)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "File a tax report" })
   @ApiParam({ name: "id", description: "Tax report ID" })
@@ -2746,6 +2857,8 @@ export class CustomerPortalController {
   }
 
   @Patch("taxes/:id/pay")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_TAXES)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Pay a tax report" })
   @ApiParam({ name: "id", description: "Tax report ID" })
@@ -2777,6 +2890,8 @@ export class CustomerPortalController {
   }
 
   @Delete("taxes/:id")
+  @UseGuards(PermissionsGuard)
+  @Permissions(PermissionName.MANAGE_TAXES)
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: "Delete tax report" })
   @ApiParam({ name: "id", description: "Tax report ID" })

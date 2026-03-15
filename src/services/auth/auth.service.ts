@@ -15,8 +15,13 @@ import { TokenFreeBlacklistService } from "../token/token-free-blacklist.service
 import { JwtPayload } from "@/models/interfaces";
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { ActivityService } from "../activity/activity.service";
-import { ActivityType } from "@/models/enums/shared.enum";
+import {
+  ActivityType,
+  RoleName,
+  PermissionName,
+} from "@/models/enums/shared.enum";
 import { getCurrencyFromCountry } from "@/common/utils/currency.util";
+import { getUserPermissions } from "@/config/permissions.config";
 
 @Injectable()
 export class AuthService {
@@ -91,10 +96,19 @@ export class AuthService {
       populate: "users",
     });
 
+    // Resolve effective permissions for the response (Admin gets all permissions)
+    const effectivePermissions = getUserPermissions(
+      user.role as RoleName,
+      undefined,
+    );
+
     const { password, _id, ...userResult } = user.toObject();
 
     return {
-      user: userResult,
+      user: {
+        ...userResult,
+        permissions: effectivePermissions,
+      },
       ...tokens,
     };
   }
@@ -133,10 +147,21 @@ export class AuthService {
       title: "User Login",
     });
 
+    // Resolve effective permissions for the response
+    const effectivePermissions = getUserPermissions(
+      user.role as RoleName,
+      user.permissionMode === "custom"
+        ? (user.permissions as PermissionName[])
+        : undefined,
+    );
+
     const { password: _, ...userResult } = user.toObject();
 
     return {
-      user: userResult,
+      user: {
+        ...userResult,
+        permissions: effectivePermissions, // Include resolved permissions
+      },
       ...tokens,
     };
   }
@@ -174,14 +199,22 @@ export class AuthService {
   }
 
   private async generateTokens(user: UserDocument) {
+    // Resolve effective permissions based on permissionMode
+    const effectivePermissions = getUserPermissions(
+      user.role as RoleName,
+      user.permissionMode === "custom"
+        ? (user.permissions as PermissionName[])
+        : undefined,
+    );
+
     const payload: JwtPayload = {
       id: user._id.toString(),
       email: user.email,
       role: user.role,
       accountId: user.account.toString(),
-      tokenVersion: user.tokenVersion, // Include token version for invalidation
+      tokenVersion: user.tokenVersion,
       permissionMode: user.permissionMode || "inherit",
-      permissions: user.permissions as any, // Include custom permissions if set
+      permissions: effectivePermissions, // Resolved permissions from backend
     };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, { expiresIn: "15m" }),

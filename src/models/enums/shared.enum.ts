@@ -78,6 +78,7 @@ export enum ActivityType {
   QUOTATION_ACCEPTED = "quotation_accepted",
   QUOTATION_DECLINED = "quotation_declined",
   QUOTATION_CONVERTED = "quotation_converted",
+  QUOTATION_EXPIRED = "quotation_expired",
   PRODUCT_CREATED = "product_created",
   PRODUCT_UPDATED = "product_updated",
   PRODUCT_LOW_STOCK = "product_low_stock",

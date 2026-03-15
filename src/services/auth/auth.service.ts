@@ -15,6 +15,7 @@ import { TokenFreeBlacklistService } from "../token/token-free-blacklist.service
 import { JwtPayload } from "@/models/interfaces";
 import { Account, AccountDocument } from "@/schemas/account.schema";
 import { ActivityService } from "../activity/activity.service";
+import { EmailService } from "../email/email.service";
 import {
   ActivityType,
   RoleName,
@@ -31,6 +32,7 @@ export class AuthService {
     private jwtService: JwtService,
     private blacklistService: TokenFreeBlacklistService,
     private activityService: ActivityService,
+    private emailService: EmailService,
   ) {}
 
   async registerCompany(createCompanyandUserDto: CreateCompanyandUserDto) {
@@ -88,6 +90,13 @@ export class AuthService {
     await this.accountModel
       .updateOne({ _id: account._id }, { users: [user._id], ownerId: user._id })
       .exec();
+
+    // Send welcome email (don't await - send asynchronously)
+    this.emailService
+      .sendWelcomeEmail(user.email, user.firstName, account.name)
+      .catch((err) => {
+        console.error("Failed to send welcome email:", err);
+      });
 
     // Generate tokens
     const tokens = await this.generateTokens(user);

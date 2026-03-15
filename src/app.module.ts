@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import { ThrottlerModule } from "@nestjs/throttler";
+import { ScheduleModule } from "@nestjs/schedule";
 
 // Import modules
 import { JwtModule } from "@nestjs/jwt";
@@ -42,6 +43,7 @@ import { TaxService } from "./services/tax/tax.service";
 import { AnalyticsService } from "./services/analytics/analytics.service";
 import { CustomerPortalController } from "./controllers/customer-portal/customer-portal.controller";
 import { CustomerService } from "./services/customer/customer.service";
+import { ScheduledTasksService } from "./services/scheduled-tasks/scheduled-tasks.service";
 
 @Module({
   imports: [
@@ -60,6 +62,9 @@ import { CustomerService } from "./services/customer/customer.service";
       isGlobal: true,
       envFilePath: [".env.local", ".env"],
     }),
+
+    // Scheduled tasks
+    ScheduleModule.forRoot(),
 
     // Database connection
     MongooseModule.forRootAsync({
@@ -84,7 +89,7 @@ import { CustomerService } from "./services/customer/customer.service";
       { name: "Expense", schema: ExpenseSchema },
       { name: "Payroll", schema: PayrollSchema },
       { name: "TaxReport", schema: TaxReportSchema },
-      {name:"Staff", schema: StaffSchema}
+      { name: "Staff", schema: StaffSchema },
     ]),
     // Rate limiting
     ThrottlerModule.forRoot({
@@ -92,11 +97,7 @@ import { CustomerService } from "./services/customer/customer.service";
       limit: 100,
     }),
   ],
-  controllers: [
-    AuthController,
-    EmailController,
-    CustomerPortalController,
-  ],
+  controllers: [AuthController, EmailController, CustomerPortalController],
   providers: [
     AuthService,
     AccountService,
@@ -117,6 +118,7 @@ import { CustomerService } from "./services/customer/customer.service";
     PayrollService,
     TaxService,
     AnalyticsService,
+    ScheduledTasksService,
   ],
 })
 export class AppModule {}

@@ -12,12 +12,14 @@ import { CreateUserDto } from "@/models/dto/users/user.dto";
 import { User, UserDocument } from "@/schemas/user.schema";
 import { AccountDocument } from "@/schemas/account.schema";
 import { PaginationQuery } from "@/common/types";
+import { EmailService } from "../email/email.service";
 
 @Injectable()
 export class UserService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel("Account") private accountModel: Model<AccountDocument>,
+    private emailService: EmailService,
   ) {}
 
   async registerUser(
@@ -62,6 +64,19 @@ export class UserService {
     await user.save();
 
     await account.updateOne({ $push: { users: user._id } });
+
+    // Send account created email (async, don't block)
+    this.emailService
+      .sendAccountCreatedEmail(
+        user.email,
+        user.firstName,
+        account.name,
+        user.role,
+        createUserDto.password, // Send the original password before hashing
+      )
+      .catch((err) => {
+        console.error("Failed to send account created email:", err);
+      });
   }
 
   async updateUser(

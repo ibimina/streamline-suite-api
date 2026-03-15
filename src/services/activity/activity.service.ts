@@ -241,6 +241,7 @@ export class ActivityService {
       [ActivityType.QUOTATION_ACCEPTED]: "Quotation accepted",
       [ActivityType.QUOTATION_DECLINED]: "Quotation declined",
       [ActivityType.QUOTATION_CONVERTED]: "Quotation converted to invoice",
+      [ActivityType.QUOTATION_EXPIRED]: "Quotation expired",
     };
 
     return this.create({

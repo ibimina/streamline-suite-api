@@ -2009,13 +2009,14 @@ export class CustomerPortalController {
   @Post("templates")
   @ApiOperation({ summary: "Create a new template upload" })
   async uploadTemplate(
-    @Req() req: Request & { user: { accountId: string } },
+    @Req() req: Request & { user: { accountId: string; id: string } },
     @Body() uploadFileDto: UploadFileDto,
   ) {
     try {
       const result = await this.templateService.uploadTemplate(
         uploadFileDto,
         req.user.accountId,
+        req.user.id,
       );
       if (result) {
         return {

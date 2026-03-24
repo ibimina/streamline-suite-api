@@ -18,7 +18,7 @@ export class TemplateService {
     @InjectModel(Account.name)
     private readonly accountModel: Model<AccountDocument>,
   ) {}
-  async uploadTemplate(uploadFileDto: UploadFileDto, accountId: string) {
+  async uploadTemplate(uploadFileDto: UploadFileDto, accountId: string, userId: string) {
     try {
       this.logger.log(`Starting template upload for account: ${accountId}`);
       this.logger.log(
@@ -48,6 +48,7 @@ export class TemplateService {
         name,
         description,
         account: account._id,
+        createdBy: userId,
       });
       this.logger.log(`Template created: ${template._id}`);
 

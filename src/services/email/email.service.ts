@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 
 export interface EmailOptions {
   to: string;
@@ -15,7 +16,7 @@ export class EmailService {
   private transporter: nodemailer.Transporter;
 
   constructor(private configService: ConfigService) {
-    this.transporter = nodemailer.createTransport({
+    const transportOptions: SMTPTransport.Options = {
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
@@ -25,7 +26,8 @@ export class EmailService {
       },
       // Force IPv4 to avoid ENETUNREACH errors with IPv6
       family: 4,
-    });
+    };
+    this.transporter = nodemailer.createTransport(transportOptions);
     this.logger.log("Email provider: Gmail SMTP initialized");
   }
 

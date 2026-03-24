@@ -81,6 +81,13 @@ export class User {
   @Prop({ type: Types.ObjectId, ref: "User" })
   updatedBy?: Types.ObjectId;
 
+  // Password reset fields
+  @Prop()
+  resetPasswordToken?: string;
+
+  @Prop({ type: Date })
+  resetPasswordExpires?: Date;
+
   @Prop({ default: Date.now })
   createdAt: Date;
 

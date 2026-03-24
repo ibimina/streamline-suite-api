@@ -356,4 +356,92 @@ export class AuthService {
   async getBlacklistStats() {
     return await this.blacklistService.getStats();
   }
+
+  // Forgot Password - Send reset email
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.userModel.findOne({ email: email.toLowerCase() });
+
+    // Always return success message to prevent email enumeration
+    const successMessage = "If an account with this email exists, a password reset link has been sent.";
+
+    if (!user || !user.isActive) {
+      // Don't reveal if user exists
+      return { message: successMessage };
+    }
+
+    // Generate a secure random token
+    const crypto = await import("crypto");
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // Hash the token for storage (don't store plain token)
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // Set token and expiration (1 hour)
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000);
+    await user.save();
+
+    // Send reset email with the plain token (user will use plain token, we compare hash)
+    try {
+      await this.emailService.sendPasswordResetEmail(
+        user.email,
+        user.firstName,
+        resetToken,
+      );
+    } catch (error) {
+      console.error("Failed to send password reset email:", error);
+      // Still return success to prevent enumeration
+    }
+
+    return { message: successMessage };
+  }
+
+  // Reset Password - Verify token and set new password
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    // Hash the incoming token to compare with stored hash
+    const crypto = await import("crypto");
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    // Find user with valid token and not expired
+    const user = await this.userModel.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new BadRequestException("Invalid or expired password reset token");
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password and clear reset token
+    user.password = hashedPassword;
+    user.passwordChangedAt = new Date();
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    // Invalidate all existing tokens after password reset
+    await this.blacklistService.invalidateTokensOnPasswordChange(
+      user._id.toString(),
+    );
+
+    await this.activityService.create({
+      account: user.account?._id as any,
+      user: user._id,
+      type: ActivityType.PASSWORD_CHANGE,
+      description: "User reset their password",
+      title: "Password Reset",
+    });
+
+    return { message: "Password has been reset successfully. Please login with your new password." };
+  }
 }

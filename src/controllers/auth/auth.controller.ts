@@ -20,6 +20,8 @@ import {
   RefreshTokenDto,
   ChangePasswordDto,
   CreateCompanyandUserDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
 } from "@/models/dto/auth/auth.dto";
 
 @ApiTags("auth")
@@ -31,11 +33,11 @@ export class AuthController {
   @ApiOperation({ summary: "Register a new account" })
   @ApiResponse({ status: 409, description: "Account already exists" })
   async registerCompany(
-    @Body() createCompanyandUserDto: CreateCompanyandUserDto
+    @Body() createCompanyandUserDto: CreateCompanyandUserDto,
   ) {
     try {
       const account = await this.authService.registerCompany(
-        createCompanyandUserDto
+        createCompanyandUserDto,
       );
       if (account) {
         return {
@@ -47,7 +49,7 @@ export class AuthController {
     } catch (error) {
       console.error(
         `Error occured in Auth Controller in - registerCompany`,
-        JSON.stringify(error)
+        JSON.stringify(error),
       );
       throw error;
     }
@@ -69,10 +71,10 @@ export class AuthController {
     } catch (error) {
       console.error(
         `Error occured in Auth Controller in - login`,
-        JSON.stringify(error)
+        JSON.stringify(error),
       );
       throw error;
-      }
+    }
   }
 
   @Post("refreshToken")
@@ -82,7 +84,9 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Invalid refresh token" })
   async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
     try {
-      const result = await this.authService.refreshToken(refreshTokenDto.refreshToken);
+      const result = await this.authService.refreshToken(
+        refreshTokenDto.refreshToken,
+      );
       return {
         payload: result,
         message: "Token refreshed successfully",
@@ -91,7 +95,7 @@ export class AuthController {
     } catch (error) {
       console.error(
         `Error occured in Auth Controller in - refresh`,
-        JSON.stringify(error)
+        JSON.stringify(error),
       );
       throw error;
     }
@@ -105,13 +109,13 @@ export class AuthController {
   @ApiResponse({ status: 400, description: "Current password is incorrect" })
   async changePassword(
     @GetUser("id") userId: string,
-    @Body() changePasswordDto: ChangePasswordDto
+    @Body() changePasswordDto: ChangePasswordDto,
   ) {
     try {
       const result = await this.authService.changePassword(
         userId,
         changePasswordDto.currentPassword,
-        changePasswordDto.newPassword
+        changePasswordDto.newPassword,
       );
       return {
         payload: result,
@@ -121,7 +125,7 @@ export class AuthController {
     } catch (error) {
       console.error(
         `Error occured in Auth Controller in - changePassword`,
-        JSON.stringify(error)
+        JSON.stringify(error),
       );
       throw error;
     }
@@ -145,9 +149,11 @@ export class AuthController {
     status: 200,
     description: "Logout successful - all tokens invalidated",
   })
-  async logout(@Req() req: {user:{id: string}, headers: {authorization?: string}},) {
+  async logout(
+    @Req() req: { user: { id: string }; headers: { authorization?: string } },
+  ) {
     // Extract token from Authorization header (not stored, just for signature)
-    console.log(req.headers, req.user)
+    console.log(req.headers, req.user);
     const token = req.headers.authorization?.replace("Bearer ", "");
     return this.authService.logout(token, req.user.id);
   }
@@ -184,5 +190,56 @@ export class AuthController {
   @ApiBearerAuth("JWT-auth")
   async getBlacklistStats() {
     return this.authService.getBlacklistStats();
+  }
+
+  @Post("forgot-password")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Request password reset email" })
+  @ApiResponse({
+    status: 200,
+    description: "Password reset email sent if account exists",
+  })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    try {
+      const result = await this.authService.forgotPassword(
+        forgotPasswordDto.email,
+      );
+      return {
+        payload: null,
+        message: result.message,
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        `Error occurred in Auth Controller in - forgotPassword`,
+        JSON.stringify(error),
+      );
+      throw error;
+    }
+  }
+
+  @Post("reset-password")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Reset password with token" })
+  @ApiResponse({ status: 200, description: "Password reset successfully" })
+  @ApiResponse({ status: 400, description: "Invalid or expired token" })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    try {
+      const result = await this.authService.resetPassword(
+        resetPasswordDto.token,
+        resetPasswordDto.newPassword,
+      );
+      return {
+        payload: null,
+        message: result.message,
+        status: HttpStatus.OK,
+      };
+    } catch (error) {
+      console.error(
+        `Error occurred in Auth Controller in - resetPassword`,
+        JSON.stringify(error),
+      );
+      throw error;
+    }
   }
 }

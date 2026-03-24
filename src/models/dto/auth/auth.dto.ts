@@ -81,3 +81,21 @@ export class ChangePasswordDto {
   @MinLength(8)
   newPassword: string;
 }
+
+export class ForgotPasswordDto {
+  @ApiProperty({ description: "Email address" })
+  @IsEmail()
+  @Transform(({ value }) => value?.trim()?.toLowerCase())
+  email: string;
+}
+
+export class ResetPasswordDto {
+  @ApiProperty({ description: "Password reset token" })
+  @IsString()
+  token: string;
+
+  @ApiProperty({ description: "New password (minimum 8 characters)" })
+  @IsString()
+  @MinLength(8)
+  newPassword: string;
+}
